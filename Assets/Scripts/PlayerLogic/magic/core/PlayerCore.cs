@@ -22,7 +22,12 @@ public class PlayerCore : MonoBehaviour
 
     [Header("Способности")]
     [SerializeField] private List<CoreAbilityBase> abilities = new List<CoreAbilityBase>();
-    [SerializeField] private KeyCode[] abilityKeys;
+
+    [Header("Клавиши категорий способностей (по умолчанию: 4,5,6,7)")]
+    [SerializeField] private Key combatKey = Key.Digit4;      // красные (Combat) — пила/лазеры
+    [SerializeField] private Key buffDebuffKey = Key.Digit5;  // жёлтые (BuffDebuff)
+    [SerializeField] private Key regenKey = Key.Digit6;       // зелёные (Regeneration)
+    [SerializeField] private Key ultimateKey = Key.Digit7;    // фиолетовые (Ultimate)
 
     private int currentEnergy;
     private float repairCooldownTimer;
@@ -96,16 +101,60 @@ public class PlayerCore : MonoBehaviour
             RepairAllParts();
         }
 
-        // Способности на назначенных клавишах
-        for (int i = 0; i < abilities.Count && i < abilityKeys.Length; i++)
-        {
-            Key unityKey = (Key)abilityKeys[i];
+        // Способности по категориям: 4 — красные, 5 — жёлтые, 6 — зелёные, 7 — фиолетовые
+        TryActivateCategory(combatKey, CoreAbilityBase.AbilityType.Combat);
+        TryActivateCategory(buffDebuffKey, CoreAbilityBase.AbilityType.BuffDebuff);
+        TryActivateCategory(regenKey, CoreAbilityBase.AbilityType.Regeneration);
+        TryActivateCategory(ultimateKey, CoreAbilityBase.AbilityType.Ultimate);
+    }
 
-            if (keyboard[unityKey].wasPressedThisFrame)
+    /// <summary>Активирует первую доступную способность указанной категории.</summary>
+    private void TryActivateCategory(Key key, CoreAbilityBase.AbilityType type)
+    {
+        if (!keyboard[key].wasPressedThisFrame) return;
+
+        foreach (var ability in abilities)
+        {
+            if (ability == null || ability.abilityType != type) continue;
+
+            if (CanUseAbility && ability.CanActivate(this))
             {
-                UseAbility(i);
+                ActivateAbility(ability);
+                Debug.Log($"[СПОСОБНОСТЬ] Категория «{GetCategoryName(type)}» активирована: {ability.abilityName}");
+                return;
+            }
+            else
+            {
+                string reason = IsOverheated ? "ядро перегрето"
+                    : ability.IsOnCooldown ? $"перезарядка {ability.CooldownRemaining:F1} сек"
+                    : currentEnergy < ability.energyCost ? $"не хватает энергии ({ability.energyCost})"
+                    : "нельзя применить";
+                Debug.Log($"[СПОСОБНОСТЬ] Категория «{GetCategoryName(type)}» недоступна: {reason}");
+                return;
             }
         }
+        Debug.Log($"[СПОСОБНОСТЬ] Категория «{GetCategoryName(type)}» не назначена ни на одну способность.");
+    }
+
+    private static string GetCategoryName(CoreAbilityBase.AbilityType type)
+    {
+        switch (type)
+        {
+            case CoreAbilityBase.AbilityType.Combat: return "Красные (боевые)";
+            case CoreAbilityBase.AbilityType.BuffDebuff: return "Жёлтые (баффы/дебаффы)";
+            case CoreAbilityBase.AbilityType.Regeneration: return "Зелёные (регенерация)";
+            case CoreAbilityBase.AbilityType.Ultimate: return "Фиолетовые (ультимейт)";
+            default: return type.ToString();
+        }
+    }
+
+    private void ActivateAbility(CoreAbilityBase ability)
+    {
+        ability.Activate(this, stateManager, movement);
+        SpendEnergy(ability.energyCost);
+
+        if (overheatSystem != null)
+            overheatSystem.AddHeat(ability.heatGenerated);
     }
 
     public void RepairAllParts()
@@ -144,15 +193,7 @@ public class PlayerCore : MonoBehaviour
 
         if (!CanUseAbility || !ability.CanActivate(this)) return false;
 
-        ability.Activate(this, stateManager, movement);
-        SpendEnergy(ability.energyCost);
-
-        if (overheatSystem != null)
-            overheatSystem.AddHeat(ability.heatGenerated);
-
-        if (coreVisual != null)
-            coreVisual.SetCoreColor(ability.GetCoreColor());
-
+        ActivateAbility(ability);
         return true;
     }
 
