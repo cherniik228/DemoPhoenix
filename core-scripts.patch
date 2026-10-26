@@ -1,0 +1,2367 @@
+From 8b16810a24ebff16881bb4c13519ca3bf392e77d Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Mon, 26 Oct 2026 18:16:22 +0000
+Subject: [PATCH] Refactor: StateManagerBase, StatusEffectSystem; core cooling
+ x1.5, no heat from running, state logging
+
+---
+ Assets/1.unity                                |   6 +-
+ Assets/Prefabs/LimbSwapSystem.cs              |  30 +--
+ .../PlayerLogic/Enemy/EnemyBodyPart.cs        |  10 +-
+ .../Scripts/PlayerLogic/Enemy/EnemyCombat.cs  |  53 +++---
+ .../PlayerLogic/Enemy/EnemyStateManager.cs    |  71 ++++---
+ .../PlayerLogic/PlayerMuw/PlayerCombat.cs     |   8 +-
+ .../PlayerMuw/PlayerInputHandler.cs           |   2 +-
+ .../PlayerLogic/PlayerMuw/PlayerLockOn.cs     |   8 +-
+ .../PlayerLogic/PlayerMuw/PlayerMovement.cs   |  22 +--
+ .../PlayerMuw/PlayerStateManager.cs           | 148 +++++----------
+ .../Scripts/PlayerLogic/StateManagerBase.cs   |  72 +++++++
+ .../Scripts/PlayerLogic/magic/CameraPivot.cs  |  22 +--
+ .../PlayerLogic/magic/StatusEffectSystem.cs   | 105 +++++++++++
+ .../PlayerLogic/magic/core/CloneController.cs |   4 +-
+ .../core/Core Abilities/CoreAbilityBase.cs    |  36 ++--
+ .../grein/RegenerationAbility.cs              |  22 +--
+ .../Core Abilities/purple/CloneAbility.cs     |  16 +-
+ .../Core Abilities/purple/ReviveAbility.cs    |  22 +--
+ .../Core Abilities/red/ChainsawAbility.cs     |  20 +-
+ .../Core Abilities/red/LaserShotAbility.cs    |  18 +-
+ .../yellow/EnhancedRegenBuff.cs               |  16 +-
+ .../Core Abilities/yellow/WeaknessDebuff.cs   |  12 +-
+ .../magic/core/CoreOverheatSystem.cs          | 100 +++++++---
+ .../Scripts/PlayerLogic/magic/core/CoreUI.cs  |  38 ++--
+ .../PlayerLogic/magic/core/CoreVisual.cs      |   6 +-
+ .../PlayerLogic/magic/core/PlayerCore.cs      | 178 +++++++++---------
+ Assets/test/TestLimbSwap.cs                   |  32 ++--
+ 27 files changed, 632 insertions(+), 445 deletions(-)
+ create mode 100644 Assets/Scripts/PlayerLogic/StateManagerBase.cs
+ create mode 100644 Assets/Scripts/PlayerLogic/magic/StatusEffectSystem.cs
+
+diff --git a/Assets/1.unity b/Assets/1.unity
+index af63fa2..4c10236 100644
+--- a/Assets/1.unity
++++ b/Assets/1.unity
+@@ -480,10 +480,12 @@ MonoBehaviour:
+   m_Name: 
+   m_EditorClassIdentifier: Assembly-CSharp::CoreOverheatSystem
+   maxHeat: 100
+-  coolingRate: 5
++  coolingRate: 15
+   overheatThreshold: 80
+-  advancedCoolingRate: 15
++  advancedCoolingRate: 30
+   hasAdvancedCooling: 1
++  logStateChanges: 1
++  stateLogInterval: 1
+ --- !u!114 &381730431
+ MonoBehaviour:
+   m_ObjectHideFlags: 0
+diff --git a/Assets/Prefabs/LimbSwapSystem.cs b/Assets/Prefabs/LimbSwapSystem.cs
+index 26f0cf9..282b7d9 100644
+--- a/Assets/Prefabs/LimbSwapSystem.cs
++++ b/Assets/Prefabs/LimbSwapSystem.cs
+@@ -3,7 +3,7 @@ using System.Collections.Generic;
+ 
+ public class LimbSwapSystem : MonoBehaviour
+ {
+-    [Header("Текущие части тела")]
++    [Header("РўРµРєСѓС‰РёРµ С‡Р°СЃС‚Рё С‚РµР»Р°")]
+     [SerializeField] private GameObject currentHead;
+     [SerializeField] private GameObject currentTorso;
+     [SerializeField] private GameObject currentArmL;
+@@ -11,7 +11,7 @@ public class LimbSwapSystem : MonoBehaviour
+     [SerializeField] private GameObject currentLegL;
+     [SerializeField] private GameObject currentLegR;
+ 
+-    [Header("Доступные префабы для замены")]
++    [Header("Р”РѕСЃС‚СѓРїРЅС‹Рµ РїСЂРµС„Р°Р±С‹ РґР»СЏ Р·Р°РјРµРЅС‹")]
+     [SerializeField] private List<GameObject> availableHeads = new List<GameObject>();
+     [SerializeField] private List<GameObject> availableTorsos = new List<GameObject>();
+     [SerializeField] private List<GameObject> availableArmsL = new List<GameObject>();
+@@ -19,7 +19,7 @@ public class LimbSwapSystem : MonoBehaviour
+     [SerializeField] private List<GameObject> availableLegsL = new List<GameObject>();
+     [SerializeField] private List<GameObject> availableLegsR = new List<GameObject>();
+ 
+-    [Header("Кости-якоря на скелете")]
++    [Header("РљРѕСЃС‚Рё-СЏРєРѕСЂСЏ РЅР° СЃРєРµР»РµС‚Рµ")]
+     [SerializeField] private Transform boneHead;
+     [SerializeField] private Transform boneShoulderL;
+     [SerializeField] private Transform boneShoulderR;
+@@ -44,57 +44,57 @@ public class LimbSwapSystem : MonoBehaviour
+         anchors["LegL"] = boneHipL;
+         anchors["LegR"] = boneHipR;
+ 
+-        Debug.Log("[LimbSwap] Система инициализирована");
++        Debug.Log("[LimbSwap] РЎРёСЃС‚РµРјР° РёРЅРёС†РёР°Р»РёР·РёСЂРѕРІР°РЅР°");
+     }
+ 
+     public void SwapLimb(string limbType, GameObject newLimbPrefab)
+     {
+         if (!currentLimbs.ContainsKey(limbType))
+         {
+-            Debug.LogError($"[LimbSwap] Неизвестный тип: {limbType}");
++            Debug.LogError($"[LimbSwap] РќРµРёР·РІРµСЃС‚РЅС‹Р№ С‚РёРї: {limbType}");
+             return;
+         }
+ 
+         if (newLimbPrefab == null)
+         {
+-            Debug.LogError($"[LimbSwap] Префаб не назначен для {limbType}!");
++            Debug.LogError($"[LimbSwap] РџСЂРµС„Р°Р± РЅРµ РЅР°Р·РЅР°С‡РµРЅ РґР»СЏ {limbType}!");
+             return;
+         }
+ 
+-        Debug.Log($"[LimbSwap] Меняем {limbType} на {newLimbPrefab.name}");
++        Debug.Log($"[LimbSwap] РњРµРЅСЏРµРј {limbType} РЅР° {newLimbPrefab.name}");
+ 
+-        // Получаем якорь ДО удаления старой части
++        // РџРѕР»СѓС‡Р°РµРј СЏРєРѕСЂСЊ Р”Рћ СѓРґР°Р»РµРЅРёСЏ СЃС‚Р°СЂРѕР№ С‡Р°СЃС‚Рё
+         Transform anchor = anchors.ContainsKey(limbType) ? anchors[limbType] : null;
+         if (anchor == null)
+         {
+-            Debug.LogError($"[LimbSwap] Якорь не найден для {limbType}!");
++            Debug.LogError($"[LimbSwap] РЇРєРѕСЂСЊ РЅРµ РЅР°Р№РґРµРЅ РґР»СЏ {limbType}!");
+             return;
+         }
+ 
+-        // Сохраняем позицию и ротацию якоря
++        // РЎРѕС…СЂР°РЅСЏРµРј РїРѕР·РёС†РёСЋ Рё СЂРѕС‚Р°С†РёСЋ СЏРєРѕСЂСЏ
+         Vector3 anchorPosition = anchor.position;
+         Quaternion anchorRotation = anchor.rotation;
+ 
+-        // Удаляем старую часть
++        // РЈРґР°Р»СЏРµРј СЃС‚Р°СЂСѓСЋ С‡Р°СЃС‚СЊ
+         if (currentLimbs[limbType] != null)
+         {
+             Destroy(currentLimbs[limbType].gameObject);
+         }
+ 
+-        // Создаём новую
++        // РЎРѕР·РґР°С‘Рј РЅРѕРІСѓСЋ
+         GameObject newLimb = Instantiate(newLimbPrefab, anchorPosition, anchorRotation);
+         newLimb.name = limbType + "_Instance";
+ 
+-        // Делаем дочерним объектом торса
++        // Р”РµР»Р°РµРј РґРѕС‡РµСЂРЅРёРј РѕР±СЉРµРєС‚РѕРј С‚РѕСЂСЃР°
+         newLimb.transform.SetParent(currentTorso.transform);
+ 
+-        // ВАЖНО: Сбрасываем локальную позицию и ротацию
++        // Р’РђР–РќРћ: РЎР±СЂР°СЃС‹РІР°РµРј Р»РѕРєР°Р»СЊРЅСѓСЋ РїРѕР·РёС†РёСЋ Рё СЂРѕС‚Р°С†РёСЋ
+         newLimb.transform.localPosition = Vector3.zero;
+         newLimb.transform.localRotation = Quaternion.identity;
+ 
+         currentLimbs[limbType] = newLimb;
+ 
+-        Debug.Log($"[LimbSwap] {limbType} заменена! Позиция якоря: {anchorPosition}");
++        Debug.Log($"[LimbSwap] {limbType} Р·Р°РјРµРЅРµРЅР°! РџРѕР·РёС†РёСЏ СЏРєРѕСЂСЏ: {anchorPosition}");
+     }
+ 
+     public GameObject GetCurrentLimb(string limbType)
+diff --git a/Assets/Scripts/PlayerLogic/Enemy/EnemyBodyPart.cs b/Assets/Scripts/PlayerLogic/Enemy/EnemyBodyPart.cs
+index 86cb159..3a5f104 100644
+--- a/Assets/Scripts/PlayerLogic/Enemy/EnemyBodyPart.cs
++++ b/Assets/Scripts/PlayerLogic/Enemy/EnemyBodyPart.cs
+@@ -5,12 +5,12 @@ public class EnemyBodyPart : MonoBehaviour, IDamageable
+ {
+     public enum PartType { Head, LeftArm, RightArm, LeftLeg, RightLeg, Torso }
+ 
+-    [Header("Настройки")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё")]
+     [SerializeField] private PartType partType = PartType.Torso;
+     [SerializeField] private int maxHealth = 50;
+     [SerializeField] private float severThreshold = 0f;
+ 
+-    [Header("Визуальные эффекты")]
++    [Header("Р’РёР·СѓР°Р»СЊРЅС‹Рµ СЌС„С„РµРєС‚С‹")]
+     [SerializeField] private GameObject breakEffectPrefab;
+     [SerializeField] private Color brokenColor = Color.yellow;
+ 
+@@ -48,7 +48,7 @@ public class EnemyBodyPart : MonoBehaviour, IDamageable
+         if (isSevered) return;
+ 
+         currentHealth -= amount;
+-        Debug.Log($"[Враг-{partType}] Урон: {amount}. HP: {currentHealth}/{maxHealth}");
++        Debug.Log($"[Р’СЂР°Рі-{partType}] РЈСЂРѕРЅ: {amount}. HP: {currentHealth}/{maxHealth}");
+ 
+         UpdateVisuals();
+ 
+@@ -65,7 +65,7 @@ public class EnemyBodyPart : MonoBehaviour, IDamageable
+     private void BreakPart(Vector3 hitDirection)
+     {
+         isBroken = true;
+-        Debug.Log($"[Враг-{partType}] СЛОМАНА!");
++        Debug.Log($"[Р’СЂР°Рі-{partType}] РЎР›РћРњРђРќРђ!");
+ 
+         if (breakEffectPrefab != null)
+         {
+@@ -84,7 +84,7 @@ public class EnemyBodyPart : MonoBehaviour, IDamageable
+     private void SeverPart(Vector3 hitDirection)
+     {
+         isSevered = true;
+-        Debug.Log($"[Враг-{partType}] ОТОРВАНА!");
++        Debug.Log($"[Р’СЂР°Рі-{partType}] РћРўРћР Р’РђРќРђ!");
+ 
+         if (breakEffectPrefab != null)
+         {
+diff --git a/Assets/Scripts/PlayerLogic/Enemy/EnemyCombat.cs b/Assets/Scripts/PlayerLogic/Enemy/EnemyCombat.cs
+index 00a4ee6..7f173b9 100644
+--- a/Assets/Scripts/PlayerLogic/Enemy/EnemyCombat.cs
++++ b/Assets/Scripts/PlayerLogic/Enemy/EnemyCombat.cs
+@@ -2,27 +2,28 @@ using UnityEngine;
+ 
+ public class EnemyCombat : MonoBehaviour
+ {
+-    [Header("Зависимости")]
++    [Header("Р—Р°РІРёСЃРёРјРѕСЃС‚Рё")]
+     [SerializeField] private Transform attackPoint;
+     [SerializeField] private LayerMask playerLayerMask;
+ 
+-    [Header("Настройки Атаки")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё РђС‚Р°РєРё")]
+     [SerializeField] private float attackRadius = 2f;
+     [SerializeField] private int attackDamage = 15;
+     [SerializeField] private float attackCooldown = 2f;
+-    [SerializeField] private float attackRange = 3f; // Дистанция для начала атаки
++    [SerializeField] private float attackRange = 3f; // Р”РёСЃС‚Р°РЅС†РёСЏ РґР»СЏ РЅР°С‡Р°Р»Р° Р°С‚Р°РєРё
+ 
+-    [Header("Настройки Урона по Конечностям")]
+-    [Tooltip("Если true, урон наносится случайной конечности. Если false - по торсу")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё РЈСЂРѕРЅР° РїРѕ РљРѕРЅРµС‡РЅРѕСЃС‚СЏРј")]
++    [Tooltip("Р•СЃР»Рё true, СѓСЂРѕРЅ РЅР°РЅРѕСЃРёС‚СЃСЏ СЃР»СѓС‡Р°Р№РЅРѕР№ РєРѕРЅРµС‡РЅРѕСЃС‚Рё. Р•СЃР»Рё false - РїРѕ С‚РѕСЂСЃСѓ")]
+     [SerializeField] private bool targetRandomBodyPart = true;
+     [SerializeField] private float bodyPartDamageMultiplier = 1f;
+ 
+-    [Header("Визуализация")]
++    [Header("Р’РёР·СѓР°Р»РёР·Р°С†РёСЏ")]
+     [SerializeField] private Color attackRadiusColor = Color.red;
+     [SerializeField] private Color attackRangeColor = Color.yellow;
+ 
+     private float attackCooldownTimer;
+     private bool isAttacking;
++    private System.Collections.Generic.List<BodyPart> activePartsCache;
+ 
+     private void Update()
+     {
+@@ -36,7 +37,7 @@ public class EnemyCombat : MonoBehaviour
+ 
+     private void TryAttack()
+     {
+-        // Проверяем, есть ли игрок в радиусе атаки
++        // РџСЂРѕРІРµСЂСЏРµРј, РµСЃС‚СЊ Р»Рё РёРіСЂРѕРє РІ СЂР°РґРёСѓСЃРµ Р°С‚Р°РєРё
+         Collider[] hits = Physics.OverlapSphere(attackPoint.position, attackRadius, playerLayerMask);
+ 
+         if (hits.Length > 0)
+@@ -50,11 +51,11 @@ public class EnemyCombat : MonoBehaviour
+         isAttacking = true;
+         attackCooldownTimer = attackCooldown;
+ 
+-        Debug.Log($"[ВРАГ] Атака! Найдено целей: {hits.Length}");
++        Debug.Log($"[Р’Р РђР“] РђС‚Р°РєР°! РќР°Р№РґРµРЅРѕ С†РµР»РµР№: {hits.Length}");
+ 
+         foreach (var hit in hits)
+         {
+-            // Ищем PlayerStateManager на игроке
++            // РС‰РµРј PlayerStateManager РЅР° РёРіСЂРѕРєРµ
+             PlayerStateManager playerState = hit.GetComponentInParent<PlayerStateManager>();
+ 
+             if (playerState != null)
+@@ -63,29 +64,29 @@ public class EnemyCombat : MonoBehaviour
+ 
+                 if (targetRandomBodyPart)
+                 {
+-                    // Наносим урон случайной конечности
++                    // РќР°РЅРѕСЃРёРј СѓСЂРѕРЅ СЃР»СѓС‡Р°Р№РЅРѕР№ РєРѕРЅРµС‡РЅРѕСЃС‚Рё
+                     DamageRandomBodyPart(playerState, hitDirection);
+                 }
+                 else
+                 {
+-                    // Наносим урон по общему HP
++                    // РќР°РЅРѕСЃРёРј СѓСЂРѕРЅ РїРѕ РѕР±С‰РµРјСѓ HP
+                     playerState.TakeDamage(attackDamage, hitDirection);
+                 }
+             }
+         }
+ 
+-        // Здесь можно запустить анимацию атаки
++        // Р—РґРµСЃСЊ РјРѕР¶РЅРѕ Р·Р°РїСѓСЃС‚РёС‚СЊ Р°РЅРёРјР°С†РёСЋ Р°С‚Р°РєРё
+         // animator.SetTrigger("Attack");
+ 
+         Invoke(nameof(ResetAttack), 0.5f);
+     }
+ 
+     /// <summary>
+-    /// Нанести урон случайной конечности игрока
++    /// РќР°РЅРµСЃС‚Рё СѓСЂРѕРЅ СЃР»СѓС‡Р°Р№РЅРѕР№ РєРѕРЅРµС‡РЅРѕСЃС‚Рё РёРіСЂРѕРєР°
+     /// </summary>
+     private void DamageRandomBodyPart(PlayerStateManager playerState, Vector3 hitDirection)
+     {
+-        // Получаем все активные конечности игрока
++        // РџРѕР»СѓС‡Р°РµРј РІСЃРµ Р°РєС‚РёРІРЅС‹Рµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё РёРіСЂРѕРєР°
+         BodyPart[] allParts = new BodyPart[]
+         {
+             playerState.Head,
+@@ -96,32 +97,34 @@ public class EnemyCombat : MonoBehaviour
+             playerState.RightLeg
+         };
+ 
+-        // Фильтруем только активные (не оторванные)
+-        System.Collections.Generic.List<BodyPart> activeParts = new System.Collections.Generic.List<BodyPart>();
++        // Р¤РёР»СЊС‚СЂСѓРµРј С‚РѕР»СЊРєРѕ Р°РєС‚РёРІРЅС‹Рµ (РЅРµ РѕС‚РѕСЂРІР°РЅРЅС‹Рµ)
++        if (activePartsCache == null)
++            activePartsCache = new System.Collections.Generic.List<BodyPart>(8);
++        activePartsCache.Clear();
+ 
+         foreach (var part in allParts)
+         {
+             if (part != null && part.IsActive)
+             {
+-                activeParts.Add(part);
++                activePartsCache.Add(part);
+             }
+         }
+ 
+-        if (activeParts.Count == 0)
++        if (activePartsCache.Count == 0)
+         {
+-            // Если все конечности оторваны, наносим урон по общему HP
++            // Р•СЃР»Рё РІСЃРµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё РѕС‚РѕСЂРІР°РЅС‹, РЅР°РЅРѕСЃРёРј СѓСЂРѕРЅ РїРѕ РѕР±С‰РµРјСѓ HP
+             playerState.TakeDamage(attackDamage, hitDirection);
+-            Debug.Log("[ВРАГ] Все конечности оторваны! Урон по общему HP.");
++            Debug.Log("[Р’Р РђР“] Р’СЃРµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё РѕС‚РѕСЂРІР°РЅС‹! РЈСЂРѕРЅ РїРѕ РѕР±С‰РµРјСѓ HP.");
+             return;
+         }
+ 
+-        // Выбираем случайную конечность
+-        BodyPart randomPart = activeParts[Random.Range(0, activeParts.Count)];
++        // Р’С‹Р±РёСЂР°РµРј СЃР»СѓС‡Р°Р№РЅСѓСЋ РєРѕРЅРµС‡РЅРѕСЃС‚СЊ
++        BodyPart randomPart = activePartsCache[Random.Range(0, activePartsCache.Count)];
+ 
+         int finalDamage = Mathf.RoundToInt(attackDamage * bodyPartDamageMultiplier);
+         randomPart.TakeDamage(finalDamage, hitDirection);
+ 
+-        Debug.Log($"[ВРАГ] Урон {finalDamage} по конечности: {randomPart.PartName}");
++        Debug.Log($"[Р’Р РђР“] РЈСЂРѕРЅ {finalDamage} РїРѕ РєРѕРЅРµС‡РЅРѕСЃС‚Рё: {randomPart.PartName}");
+     }
+ 
+     private void ResetAttack()
+@@ -141,11 +144,11 @@ public class EnemyCombat : MonoBehaviour
+     {
+         if (attackPoint != null)
+         {
+-            // Радиус поражения
++            // Р Р°РґРёСѓСЃ РїРѕСЂР°Р¶РµРЅРёСЏ
+             Gizmos.color = attackRadiusColor;
+             Gizmos.DrawWireSphere(attackPoint.position, attackRadius);
+ 
+-            // Дистанция начала атаки
++            // Р”РёСЃС‚Р°РЅС†РёСЏ РЅР°С‡Р°Р»Р° Р°С‚Р°РєРё
+             Gizmos.color = attackRangeColor;
+             Gizmos.DrawWireSphere(transform.position, attackRange);
+         }
+diff --git a/Assets/Scripts/PlayerLogic/Enemy/EnemyStateManager.cs b/Assets/Scripts/PlayerLogic/Enemy/EnemyStateManager.cs
+index d108af3..5dc3701 100644
+--- a/Assets/Scripts/PlayerLogic/Enemy/EnemyStateManager.cs
++++ b/Assets/Scripts/PlayerLogic/Enemy/EnemyStateManager.cs
+@@ -1,60 +1,57 @@
+ using UnityEngine;
+ using System;
+ 
+-public class EnemyStateManager : MonoBehaviour, IDamageable
++/// <summary>
++/// РЎРёСЃС‚РµРјР° Р·РґРѕСЂРѕРІСЊСЏ РІСЂР°РіР°. РќР°СЃР»РµРґСѓРµС‚ РѕР±С‰СѓСЋ Р»РѕРіРёРєСѓ HP Сѓ StateManagerBase,
++/// РґРѕР±Р°РІР»СЏРµС‚ РїРѕРґРґРµСЂР¶РєСѓ РґРµР±Р°С„С„РѕРІ (WeaknessDebuff) С‡РµСЂРµР· StatusEffectSystem.
++/// </summary>
++public class EnemyStateManager : StateManagerBase, IDamageable
+ {
+-    [Header("Здоровье")]
+-    [SerializeField] private int maxHealth = 100;
+-    private int currentHealth;
+-    public bool IsDead { get; private set; }
+-
+-    [Header("Конечности")]
++    [Header("Р§Р°СЃС‚Рё С‚РµР»Р° (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)")]
+     [SerializeField] private EnemyBodyPart[] bodyParts;
+ 
+-    public event Action<int, int> OnHealthChanged;
+-    public event Action OnDeath;
+-
+-    public float HealthPercent => maxHealth > 0 ? (float)currentHealth / maxHealth : 0f;
++    public EnemyBodyPart[] BodyParts => bodyParts;
+ 
+-    private void Awake()
+-    {
+-        currentHealth = maxHealth;
+-    }
++    [Header("РЎС‚Р°С‚СѓСЃРЅС‹Рµ СЌС„С„РµРєС‚С‹")]
++    [SerializeField] private StatusEffectSystem statusEffects;
+ 
+-    public void TakeDamage(int amount, Vector3 hitDirection)
++    protected override void Awake()
+     {
+-        if (IsDead) return;
++        base.Awake();
+ 
+-        currentHealth -= amount;
+-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+-
+-        if (currentHealth <= 0)
+-        {
+-            currentHealth = 0;
+-            Die();
+-        }
++        if (statusEffects == null)
++            statusEffects = GetComponent<StatusEffectSystem>();
++        if (statusEffects == null)
++            statusEffects = gameObject.AddComponent<StatusEffectSystem>();
+     }
+ 
+-    // ДОБАВЛЕНО: Метод для дебафа
++    /// <summary>
++    /// РќР°РєР»Р°РґС‹РІР°РµС‚ РјРЅРѕР¶РёС‚РµР»СЊ РІС…РѕРґСЏС‰РµРіРѕ СѓСЂРѕРЅР° РЅР° РІСЂРµРјСЏ (РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ WeaknessDebuff).
++    /// Р РµР°Р»РёР·РѕРІР°РЅРѕ С‡РµСЂРµР· СЂРµР°Р»СЊРЅСѓСЋ СЃРёСЃС‚РµРјСѓ СЌС„С„РµРєС‚РѕРІ РІРјРµСЃС‚Рѕ Р·Р°РіР»СѓС€РєРё-РєРѕСЂРѕС‚РёРЅС‹.
++    /// </summary>
+     public void ApplyDamageMultiplier(float multiplier, float duration)
+     {
+-        StartCoroutine(DamageMultiplierCoroutine(multiplier, duration));
++        statusEffects.AddEffect(new StatusEffect
++        {
++            effectName = "Weakness",
++            duration = duration,
++            speedMultiplier = 1f,
++            damageMultiplier = Mathf.Max(0f, multiplier)
++        });
++        Debug.Log($"[EnemyStateManager] {name}: РІС…РѕРґСЏС‰РёР№ СѓСЂРѕРЅ x{multiplier} РЅР° {duration}СЃ");
+     }
+ 
+-    private System.Collections.IEnumerator DamageMultiplierCoroutine(float multiplier, float duration)
++    /// <summary>Р‘Р°Р·РѕРІС‹Р№ TakeDamage СѓР¶Рµ РїСЂРёРјРµРЅСЏРµС‚ GetIncomingDamageMultiplier РІ StateManagerBase.</summary>
++    protected override float GetIncomingDamageMultiplier()
+     {
+-        // Здесь можно применить множитель урона
+-        Debug.Log($"[Враг] Урон x{multiplier} на {duration} сек");
+-        yield return new WaitForSeconds(duration);
+-        Debug.Log("[Враг] Дебаф закончился");
++        return statusEffects != null ? statusEffects.GetDamageMultiplier() : 1f;
+     }
+ 
+-    private void Die()
++    protected override void Die()
+     {
+-        IsDead = true;
+-        Debug.Log("[Враг] Погиб!");
+-        OnDeath?.Invoke();
++        base.Die();
++        Debug.Log($"[EnemyStateManager] {name} РјС‘СЂС‚РІ!");
+ 
+         if (TryGetComponent<EnemyCombat>(out var combat)) combat.enabled = false;
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerCombat.cs b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerCombat.cs
+index b0ebd67..18192f7 100644
+--- a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerCombat.cs
++++ b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerCombat.cs
+@@ -2,18 +2,18 @@ using UnityEngine;
+ 
+ public class PlayerCombat : MonoBehaviour
+ {
+-    [Header("Зависимости")]
++    [Header("Р—Р°РІРёСЃРёРјРѕСЃС‚Рё")]
+     [SerializeField] private PlayerInputHandler inputHandler;
+     [SerializeField] private PlayerMovement movement;
+     [SerializeField] private PlayerStateManager stateManager;
+     [SerializeField] private Transform attackPoint;
+ 
+-    [Header("Настройки Атак")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё РђС‚Р°Рє")]
+     [SerializeField] private float attackRadius = 1.5f;
+     [SerializeField] private int attackDamage = 10;
+     [SerializeField] private float attackCooldown = 0.5f;
+ 
+-    [Header("Заряженная Атака")]
++    [Header("Р—Р°СЂСЏР¶РµРЅРЅР°СЏ РђС‚Р°РєР°")]
+     [SerializeField] private float maxChargeTime = 2f;
+     [SerializeField] private float chargedAttackRadius = 2.5f;
+     [SerializeField] private int chargedDamage = 30;
+@@ -42,7 +42,7 @@ public class PlayerCombat : MonoBehaviour
+             int dmg = attackDamage;
+             if (stateManager != null)
+             {
+-                // ИСПРАВЛЕНО: используем множитель урона, а не скорости!
++                // РРЎРџР РђР’Р›Р•РќРћ: РёСЃРїРѕР»СЊР·СѓРµРј РјРЅРѕР¶РёС‚РµР»СЊ СѓСЂРѕРЅР°, Р° РЅРµ СЃРєРѕСЂРѕСЃС‚Рё!
+                 dmg = Mathf.RoundToInt(dmg * stateManager.GetDamageMultiplier());
+             }
+             PerformAttack(attackRadius, dmg);
+diff --git a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerInputHandler.cs b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerInputHandler.cs
+index 1bd7f7d..a720da5 100644
+--- a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerInputHandler.cs
++++ b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerInputHandler.cs
+@@ -12,7 +12,7 @@ public class PlayerInputHandler : MonoBehaviour
+     private void OnEnable() => playerInputActions.Player.Enable();
+     private void OnDisable() => playerInputActions.Player.Disable();
+ 
+-    // Свойства для чтения ввода другими компонентами
++    // РЎРІРѕР№СЃС‚РІР° РґР»СЏ С‡С‚РµРЅРёСЏ РІРІРѕРґР° РґСЂСѓРіРёРјРё РєРѕРјРїРѕРЅРµРЅС‚Р°РјРё
+     public Vector2 MoveInput => playerInputActions.Player.Move.ReadValue<Vector2>();
+     public bool IsRunning => playerInputActions.Player.Run.IsPressed();
+ 
+diff --git a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerLockOn.cs b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerLockOn.cs
+index ded129a..5466f29 100644
+--- a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerLockOn.cs
++++ b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerLockOn.cs
+@@ -2,13 +2,13 @@ using UnityEngine;
+ 
+ public class PlayerLockOn : MonoBehaviour
+ {
+-    [Header("Зависимости")]
++    [Header("Р—Р°РІРёСЃРёРјРѕСЃС‚Рё")]
+     [SerializeField] private PlayerInputHandler inputHandler;
+     [SerializeField] private PlayerMovement movement;
+     [SerializeField] private PlayerStateManager stateManager;
+-    [SerializeField] private CameraController cameraController; // Перетащите камеру сюда!
++    [SerializeField] private CameraController cameraController; // РџРµСЂРµС‚Р°С‰РёС‚Рµ РєР°РјРµСЂСѓ СЃСЋРґР°!
+ 
+-    [Header("Настройки Lock-On")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё Lock-On")]
+     [SerializeField] private float lockOnRadius = 10f;
+     [SerializeField] private LayerMask enemyMask;
+ 
+@@ -19,7 +19,7 @@ public class PlayerLockOn : MonoBehaviour
+     private void Update()
+     {
+         if (stateManager != null && stateManager.IsDead) return;
+-        if (movement != null && movement.IsDashing) return; // Нельзя лочиться во время рывка
++        if (movement != null && movement.IsDashing) return; // РќРµР»СЊР·СЏ Р»РѕС‡РёС‚СЊСЃСЏ РІРѕ РІСЂРµРјСЏ СЂС‹РІРєР°
+ 
+         HandleLockOn();
+     }
+diff --git a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerMovement.cs b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerMovement.cs
+index 7a66f91..1716522 100644
+--- a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerMovement.cs
++++ b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerMovement.cs
+@@ -4,33 +4,33 @@ using System.Collections;
+ [RequireComponent(typeof(CharacterController))]
+ public class PlayerMovement : MonoBehaviour
+ {
+-    [Header("Зависимости")]
++    [Header("Р—Р°РІРёСЃРёРјРѕСЃС‚Рё")]
+     [SerializeField] private PlayerInputHandler inputHandler;
+     [SerializeField] private PlayerLockOn lockOnSystem;
+     [SerializeField] private PlayerStateManager stateManager;
+     [SerializeField] private Transform groundCheck;
+     [SerializeField] private CameraController cameraController;
+ 
+-    [Header("Визуальная модель")]
++    [Header("Р’РёР·СѓР°Р»СЊРЅР°СЏ РјРѕРґРµР»СЊ")]
+     [SerializeField] private Transform modelTransform;
+ 
+-    [Header("Настройки Движения")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё Р”РІРёР¶РµРЅРёСЏ")]
+     [SerializeField] private float walkSpeed = 3f;
+     [SerializeField] private float runSpeed = 6f;
+     [SerializeField] private float backwardSpeedMult = 0.5f;
+ 
+-    [Header("Настройки Поворота")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё РџРѕРІРѕСЂРѕС‚Р°")]
+     [SerializeField] private float rotationSpeed = 720f;
+     [SerializeField] private float rotationStopThreshold = 2f;
+ 
+     [SerializeField] private LayerMask groundMask;
+     [SerializeField] private float groundDistance = 0.4f;
+ 
+-    [Header("Прыжок и Гравитация")]
++    [Header("РџСЂС‹Р¶РѕРє Рё Р“СЂР°РІРёС‚Р°С†РёСЏ")]
+     [SerializeField] private float jumpHeight = 2f;
+     [SerializeField] private float gravity = -15f;
+ 
+-    [Header("Рывок (Dash)")]
++    [Header("Р С‹РІРѕРє (Dash)")]
+     [SerializeField] private float dashSpeed = 15f;
+     [SerializeField] private float dashDuration = 0.2f;
+     [SerializeField] private float dashCooldown = 1f;
+@@ -49,7 +49,7 @@ public class PlayerMovement : MonoBehaviour
+ 
+         if (modelTransform == null)
+         {
+-            Debug.LogError("Model Transform не назначен! Персонаж не будет поворачиваться.");
++            Debug.LogError("Model Transform РЅРµ РЅР°Р·РЅР°С‡РµРЅ! РџРµСЂСЃРѕРЅР°Р¶ РЅРµ Р±СѓРґРµС‚ РїРѕРІРѕСЂР°С‡РёРІР°С‚СЊСЃСЏ.");
+         }
+     }
+ 
+@@ -166,13 +166,13 @@ public class PlayerMovement : MonoBehaviour
+     }
+ 
+     // ==========================================
+-    // ИСПРАВЛЕННЫЙ МЕТОД ПОВОРОТА
++    // РРЎРџР РђР’Р›Р•РќРќР«Р™ РњР•РўРћР” РџРћР’РћР РћРўРђ
+     // ==========================================
+     private void RotateToTarget(Transform target, Quaternion destination)
+     {
+-        // КОРРЕКЦИЯ: Модель из Blender повёрнута на 90 градусов.
+-        // Мы поворачиваем целевой кватернион на -90 градусов по оси Y, 
+-        // чтобы локальная ось "вперёд" модели совпала с направлением движения.
++        // РљРћР Р Р•РљР¦РРЇ: РњРѕРґРµР»СЊ РёР· Blender РїРѕРІС‘СЂРЅСѓС‚Р° РЅР° 90 РіСЂР°РґСѓСЃРѕРІ.
++        // РњС‹ РїРѕРІРѕСЂР°С‡РёРІР°РµРј С†РµР»РµРІРѕР№ РєРІР°С‚РµСЂРЅРёРѕРЅ РЅР° -90 РіСЂР°РґСѓСЃРѕРІ РїРѕ РѕСЃРё Y, 
++        // С‡С‚РѕР±С‹ Р»РѕРєР°Р»СЊРЅР°СЏ РѕСЃСЊ "РІРїРµСЂС‘Рґ" РјРѕРґРµР»Рё СЃРѕРІРїР°Р»Р° СЃ РЅР°РїСЂР°РІР»РµРЅРёРµРј РґРІРёР¶РµРЅРёСЏ.
+         Quaternion correctedDestination = destination * Quaternion.Euler(0, -90f, 0);
+ 
+         float angleDiff = Quaternion.Angle(target.rotation, correctedDestination);
+diff --git a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerStateManager.cs b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerStateManager.cs
+index 7ae3d40..ec751b3 100644
+--- a/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerStateManager.cs
++++ b/Assets/Scripts/PlayerLogic/PlayerMuw/PlayerStateManager.cs
+@@ -1,31 +1,28 @@
+-using System.Collections.Generic;
+ using UnityEngine;
+ using System;
+ 
+-public class PlayerStateManager : MonoBehaviour, IDamageable
++/// <summary>
++/// РЎРёСЃС‚РµРјР° Р·РґРѕСЂРѕРІСЊСЏ Рё С‡Р°СЃС‚РµР№ С‚РµР»Р° РёРіСЂРѕРєР°.
++/// РќР°СЃР»РµРґСѓРµС‚СЃСЏ РѕС‚ StateManagerBase (РѕР±С‰Р°СЏ Р»РѕРіРёРєР° HP СЃ РІСЂР°РіР°РјРё),
++/// РґРѕР±Р°РІР»СЏРµС‚ С‡Р°СЃС‚Рё С‚РµР»Р°, СЃС‚Р°С‚СѓСЃРЅС‹Рµ СЌС„С„РµРєС‚С‹ Рё СЃРјРµСЂС‚СЊ РѕС‚ РѕС‚СЂС‹РІР° РіРѕР»РѕРІС‹/С‚РѕСЂСЃР°.
++/// </summary>
++public class PlayerStateManager : StateManagerBase, IDamageable
+ {
+-    [Header("Здоровье")]
+-    [SerializeField] private int maxHealth = 100;
+-    private int currentHealth;
+-    public bool IsDead { get; private set; }
+-
+-    [Header("Конечности")]
++    [Header("Р§Р°СЃС‚Рё С‚РµР»Р°")]
+     [SerializeField] private BodyPart[] bodyParts;
+ 
+     public BodyPart[] BodyParts => bodyParts;
+ 
+-    [Header("Критические условия смерти")]
++    [Header("РЎРјРµСЂС‚СЊ РѕС‚ РѕС‚СЂС‹РІР°")]
+     [SerializeField] private bool dieOnHeadSevered = true;
+     [SerializeField] private bool dieOnTorsoSevered = true;
+ 
+-    [Header("Бафы и Дебафы")]
+-    private List<StatusEffect> activeEffects = new List<StatusEffect>();
++    [Header("РЎС‚Р°С‚СѓСЃРЅС‹Рµ СЌС„С„РµРєС‚С‹")]
++    [SerializeField] private StatusEffectSystem statusEffects;
+ 
+-    public event Action<int, int> OnHealthChanged;
+     public event Action<BodyPart> OnPartDamaged;
+     public event Action<BodyPart> OnPartBroken;
+     public event Action<BodyPart> OnPartSevered;
+-    public event Action OnDeath;
+ 
+     public BodyPart Head => GetPart(BodyPart.PartType.Head);
+     public BodyPart Torso => GetPart(BodyPart.PartType.Torso);
+@@ -34,21 +31,20 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
+     public BodyPart LeftLeg => GetPart(BodyPart.PartType.LeftLeg);
+     public BodyPart RightLeg => GetPart(BodyPart.PartType.RightLeg);
+ 
+-    public float HealthPercent => maxHealth > 0 ? (float)currentHealth / maxHealth : 0f;
+     public bool HasBothArms => LeftArm?.IsActive == true && RightArm?.IsActive == true;
+     public bool HasBothLegs => LeftLeg?.IsActive == true && RightLeg?.IsActive == true;
+     public bool HasHead => Head?.IsActive == true;
+ 
+-    private void Awake()
++    protected override void Awake()
+     {
+-        currentHealth = maxHealth;
+-        SubscribeToBodyParts();
+-    }
++        base.Awake();
+ 
+-    private void Update()
+-    {
+-        if (IsDead) return;
+-        UpdateEffects();
++        if (statusEffects == null)
++            statusEffects = GetComponent<StatusEffectSystem>();
++        if (statusEffects == null)
++            statusEffects = gameObject.AddComponent<StatusEffectSystem>();
++
++        SubscribeToBodyParts();
+     }
+ 
+     private void SubscribeToBodyParts()
+@@ -74,23 +70,7 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
+         return null;
+     }
+ 
+-    public void TakeDamage(int amount, Vector3 hitDirection)
+-    {
+-        if (IsDead) return;
+-
+-        int finalDamage = Mathf.RoundToInt(amount * GetDamageMultiplier());
+-        currentHealth -= finalDamage;
+-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+-
+-        Debug.Log($"Игрок получил урон: {finalDamage}. HP: {currentHealth}");
+-
+-        if (currentHealth <= 0)
+-        {
+-            currentHealth = 0;
+-            Die();
+-        }
+-    }
+-
++    /// <summary>Р’СЂР°Рі Р±СЊС‘С‚ РїРѕ РєРѕРЅРєСЂРµС‚РЅРѕР№ С‡Р°СЃС‚Рё С‚РµР»Р°; РµСЃР»Рё РµС‘ РЅРµС‚ вЂ” СѓСЂРѕРЅ РїРѕ РѕР±С‰РµРјСѓ HP.</summary>
+     public void DamageBodyPart(BodyPart.PartType partType, int amount, Vector3 hitDirection)
+     {
+         BodyPart part = GetPart(partType);
+@@ -104,12 +84,16 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
+         }
+     }
+ 
+-    public void Revive()
++    public override void Revive()
+     {
+-        IsDead = false;
+-        currentHealth = maxHealth;
+-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+-        Debug.Log("[StateManager] Игрок возрожден!");
++        base.Revive();
++
++        // Р’РѕР·РІСЂР°С‰Р°РµРј РІ СЂР°Р±РѕС‚Сѓ РєРѕРјРїРѕРЅРµРЅС‚С‹, РѕС‚РєР»СЋС‡С‘РЅРЅС‹Рµ РїСЂРё СЃРјРµСЂС‚Рё
++        if (TryGetComponent<PlayerInputHandler>(out var input)) input.enabled = true;
++        if (TryGetComponent<PlayerMovement>(out var move)) move.enabled = true;
++        if (TryGetComponent<PlayerCombat>(out var combat)) combat.enabled = true;
++
++        Debug.Log("[PlayerStateManager] РРіСЂРѕРє РІРѕСЃРєСЂРµС€С‘РЅ!");
+     }
+ 
+     private void HandlePartDamaged(BodyPart part, int currentHP, int maxHP)
+@@ -119,29 +103,22 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
+ 
+     private void HandlePartBroken(BodyPart part)
+     {
+-        Debug.Log($"[StateManager] Конечность сломана: {part.PartName}");
++        Debug.Log($"[PlayerStateManager] Р§Р°СЃС‚СЊ СЃР»РѕРјР°РЅР°: {part.PartName}");
+         OnPartBroken?.Invoke(part);
+     }
+ 
+     private void HandlePartSevered(BodyPart part)
+     {
+-        Debug.Log($"[StateManager] Конечность оторвана: {part.PartName}");
++        Debug.Log($"[PlayerStateManager] Р§Р°СЃС‚СЊ РѕС‚РѕСЂРІР°РЅР°: {part.PartName}");
+         OnPartSevered?.Invoke(part);
+         CheckCriticalDeath(part);
+     }
+ 
+     private void CheckCriticalDeath(BodyPart severedPart)
+     {
+-        bool shouldDie = false;
+-
+-        if (severedPart.Type == BodyPart.PartType.Head && dieOnHeadSevered)
+-        {
+-            shouldDie = true;
+-        }
+-        else if (severedPart.Type == BodyPart.PartType.Torso && dieOnTorsoSevered)
+-        {
+-            shouldDie = true;
+-        }
++        bool shouldDie =
++            (severedPart.Type == BodyPart.PartType.Head && dieOnHeadSevered) ||
++            (severedPart.Type == BodyPart.PartType.Torso && dieOnTorsoSevered);
+ 
+         if (shouldDie)
+         {
+@@ -150,65 +127,32 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
+         }
+     }
+ 
+-    private void Die()
++    protected override void Die()
+     {
+-        IsDead = true;
+-        Debug.Log("Игрок погиб!");
+-        OnDeath?.Invoke();
++        base.Die();
++        Debug.Log("[PlayerStateManager] РРіСЂРѕРє РјС‘СЂС‚РІ!");
+ 
+         if (TryGetComponent<PlayerInputHandler>(out var input)) input.enabled = false;
+         if (TryGetComponent<PlayerMovement>(out var move)) move.enabled = false;
+         if (TryGetComponent<PlayerCombat>(out var combat)) combat.enabled = false;
+     }
+ 
+-    public void Heal(int amount)
+-    {
+-        if (IsDead) return;
+-        currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
+-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+-    }
++    // ---------- РЎС‚Р°С‚СѓСЃРЅС‹Рµ СЌС„С„РµРєС‚С‹ (РґРµР»РµРіРёСЂРѕРІР°РЅС‹ РІ StatusEffectSystem) ----------
+ 
+-    public void AddEffect(StatusEffect newEffect)
+-    {
+-        StatusEffect effectInstance = new StatusEffect
+-        {
+-            effectName = newEffect.effectName,
+-            duration = newEffect.duration,
+-            speedMultiplier = newEffect.speedMultiplier,
+-            damageMultiplier = newEffect.damageMultiplier
+-        };
+-        effectInstance.timer = effectInstance.duration;
+-        activeEffects.Add(effectInstance);
+-    }
++    public void AddEffect(StatusEffect newEffect) => statusEffects.AddEffect(newEffect);
+ 
+-    private void UpdateEffects()
+-    {
+-        for (int i = activeEffects.Count - 1; i >= 0; i--)
+-        {
+-            activeEffects[i].timer -= Time.deltaTime;
+-            if (activeEffects[i].timer <= 0)
+-            {
+-                activeEffects.RemoveAt(i);
+-            }
+-        }
+-    }
++    public bool HasEffect(string effectName) => statusEffects.HasEffect(effectName);
+ 
+-    public float GetSpeedMultiplier()
+-    {
+-        float mult = 1f;
+-        foreach (var eff in activeEffects) mult *= eff.speedMultiplier;
+-        return mult;
+-    }
++    public void RemoveEffect(string effectName) => statusEffects.RemoveEffect(effectName);
+ 
+-    public float GetDamageMultiplier()
+-    {
+-        float mult = 1f;
+-        foreach (var eff in activeEffects) mult *= eff.damageMultiplier;
+-        return mult;
+-    }
++    public float GetSpeedMultiplier() => statusEffects.GetSpeedMultiplier();
++
++    /// <summary>РњРЅРѕР¶РёС‚РµР»СЊ РёСЃС…РѕРґСЏС‰РµРіРѕ СѓСЂРѕРЅР° РёРіСЂРѕРєР° (Р±Р°С„С„С‹ С‚РёРїР° EnhancedRegenBuff).</summary>
++    public float GetDamageMultiplier() => statusEffects.GetDamageMultiplier();
+ 
+     private void OnDestroy()
+     {
++        if (bodyParts == null) return;
+         foreach (var part in bodyParts)
+         {
+             if (part != null)
+@@ -219,4 +163,4 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/Assets/Scripts/PlayerLogic/StateManagerBase.cs b/Assets/Scripts/PlayerLogic/StateManagerBase.cs
+new file mode 100644
+index 0000000..39500be
+--- /dev/null
++++ b/Assets/Scripts/PlayerLogic/StateManagerBase.cs
+@@ -0,0 +1,72 @@
++using System;
++using UnityEngine;
++
++/// <summary>
++/// Р‘Р°Р·РѕРІР°СЏ СЃРёСЃС‚РµРјР° Р·РґРѕСЂРѕРІСЊСЏ: РѕР±С‰Р°СЏ РґР»СЏ РёРіСЂРѕРєР° Рё РІСЂР°РіР°.
++/// РҐСЂР°РЅРёС‚ HP, СЃРѕР±С‹С‚РёСЏ РёР·РјРµРЅРµРЅРёСЏ Р·РґРѕСЂРѕРІСЊСЏ Рё СЃРјРµСЂС‚СЊ.
++/// </summary>
++public abstract class StateManagerBase : MonoBehaviour, IDamageable
++{
++    [Header("Р—РґРѕСЂРѕРІСЊРµ")]
++    [SerializeField] protected int maxHealth = 100;
++    protected int currentHealth;
++
++    public bool IsDead { get; protected set; }
++
++    public event Action<int, int> OnHealthChanged; // (current, max)
++    public event Action OnDeath;
++
++    public int MaxHealth => maxHealth;
++    public int CurrentHealth => currentHealth;
++    public float HealthPercent => maxHealth > 0 ? (float)currentHealth / maxHealth : 0f;
++
++    protected virtual void Awake()
++    {
++        currentHealth = maxHealth;
++    }
++
++    public virtual void TakeDamage(int amount, Vector3 hitDirection)
++    {
++        if (IsDead || amount <= 0) return;
++
++        int finalDamage = Mathf.RoundToInt(amount * GetIncomingDamageMultiplier());
++        currentHealth -= finalDamage;
++        OnHealthChanged?.Invoke(currentHealth, maxHealth);
++
++        HandleDamaged(finalDamage, hitDirection);
++
++        if (currentHealth <= 0)
++        {
++            currentHealth = 0;
++            Die();
++        }
++    }
++
++    public virtual void Heal(int amount)
++    {
++        if (IsDead || amount <= 0) return;
++
++        currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
++        OnHealthChanged?.Invoke(currentHealth, maxHealth);
++    }
++
++    /// <summary>РџРѕР»РЅРѕРµ РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ Рё РѕР¶РёРІР»РµРЅРёРµ.</summary>
++    public virtual void Revive()
++    {
++        IsDead = false;
++        currentHealth = maxHealth;
++        OnHealthChanged?.Invoke(currentHealth, maxHealth);
++    }
++
++    protected virtual void Die()
++    {
++        IsDead = true;
++        OnDeath?.Invoke();
++    }
++
++    /// <summary>РҐСѓРє: РІС‹Р·С‹РІР°РµС‚СЃСЏ РїРѕСЃР»Рµ РЅР°РЅРµСЃРµРЅРёСЏ СѓСЂРѕРЅР° (РґР»СЏ Р»РѕРіРѕРІ/СЌС„С„РµРєС‚РѕРІ).</summary>
++    protected virtual void HandleDamaged(int appliedDamage, Vector3 hitDirection) { }
++
++    /// <summary>РњРЅРѕР¶РёС‚РµР»СЊ РІС…РѕРґСЏС‰РµРіРѕ СѓСЂРѕРЅР° (РЅР°РїСЂРёРјРµСЂ, РґРµР±Р°С„С„ СЃР»Р°Р±РѕСЃС‚Рё). РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ 1.</summary>
++    protected virtual float GetIncomingDamageMultiplier() => 1f;
++}
+diff --git a/Assets/Scripts/PlayerLogic/magic/CameraPivot.cs b/Assets/Scripts/PlayerLogic/magic/CameraPivot.cs
+index 17e0e84..446c7ef 100644
+--- a/Assets/Scripts/PlayerLogic/magic/CameraPivot.cs
++++ b/Assets/Scripts/PlayerLogic/magic/CameraPivot.cs
+@@ -3,19 +3,19 @@ using UnityEngine.InputSystem;
+ 
+ public class CameraController : MonoBehaviour
+ {
+-    [Header("Ссылки")]
+-    [SerializeField] private Transform cameraPivot; // Пустой объект на КОРНЕ игрока (НЕ на модели!)
++    [Header("РЎСЃС‹Р»РєРё")]
++    [SerializeField] private Transform cameraPivot; // РџСѓСЃС‚РѕР№ РѕР±СЉРµРєС‚ РЅР° РљРћР РќР• РёРіСЂРѕРєР° (РќР• РЅР° РјРѕРґРµР»Рё!)
+     [SerializeField] private Camera mainCamera;
+-    [SerializeField] private Transform target; // Корень игрока (НЕ модель!)
++    [SerializeField] private Transform target; // РљРѕСЂРµРЅСЊ РёРіСЂРѕРєР° (РќР• РјРѕРґРµР»СЊ!)
+ 
+-    [Header("Настройки камеры")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё РєР°РјРµСЂС‹")]
+     [SerializeField] private float mouseSensitivity = 2f;
+     [SerializeField] private float minPitch = -30f;
+     [SerializeField] private float maxPitch = 60f;
+     [SerializeField] private float distance = 5f;
+     [SerializeField] private float pivotHeight = 1.5f;
+ 
+-    [Header("Плавность")]
++    [Header("РџР»Р°РІРЅРѕСЃС‚СЊ")]
+     [SerializeField] private float positionSmoothTime = 0.2f;
+ 
+     private float xRotation = 0f;
+@@ -56,7 +56,7 @@ public class CameraController : MonoBehaviour
+             mouseDelta = Mouse.current.delta.ReadValue();
+         }
+ 
+-        // Вращение камеры мышью
++        // Р’СЂР°С‰РµРЅРёРµ РєР°РјРµСЂС‹ РјС‹С€СЊСЋ
+         float mouseX = mouseDelta.x * mouseSensitivity * 0.1f;
+         float mouseY = mouseDelta.y * mouseSensitivity * 0.1f;
+ 
+@@ -69,20 +69,20 @@ public class CameraController : MonoBehaviour
+ 
+     private void UpdateCamera()
+     {
+-        // Позиция пивота (центр вращения камеры)
++        // РџРѕР·РёС†РёСЏ РїРёРІРѕС‚Р° (С†РµРЅС‚СЂ РІСЂР°С‰РµРЅРёСЏ РєР°РјРµСЂС‹)
+         Vector3 pivotPosition = target.position + Vector3.up * pivotHeight;
+ 
+-        // Позиция камеры относительно пивота
++        // РџРѕР·РёС†РёСЏ РєР°РјРµСЂС‹ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ РїРёРІРѕС‚Р°
+         Vector3 offset = Quaternion.Euler(xRotation, yRotation, 0f) * Vector3.back * distance;
+         Vector3 desiredPosition = pivotPosition + offset;
+ 
+-        // Коллизия со стенами
++        // РљРѕР»Р»РёР·РёСЏ СЃРѕ СЃС‚РµРЅР°РјРё
+         if (Physics.Linecast(pivotPosition, desiredPosition, out RaycastHit hit))
+         {
+             desiredPosition = hit.point - (hit.normal * 0.3f);
+         }
+ 
+-        // Плавное движение камеры
++        // РџР»Р°РІРЅРѕРµ РґРІРёР¶РµРЅРёРµ РєР°РјРµСЂС‹
+         mainCamera.transform.position = Vector3.SmoothDamp(
+             mainCamera.transform.position,
+             desiredPosition,
+@@ -90,7 +90,7 @@ public class CameraController : MonoBehaviour
+             positionSmoothTime
+         );
+ 
+-        // Камера смотрит на пивот
++        // РљР°РјРµСЂР° СЃРјРѕС‚СЂРёС‚ РЅР° РїРёРІРѕС‚
+         mainCamera.transform.LookAt(pivotPosition);
+     }
+ 
+diff --git a/Assets/Scripts/PlayerLogic/magic/StatusEffectSystem.cs b/Assets/Scripts/PlayerLogic/magic/StatusEffectSystem.cs
+new file mode 100644
+index 0000000..8849ad6
+--- /dev/null
++++ b/Assets/Scripts/PlayerLogic/magic/StatusEffectSystem.cs
+@@ -0,0 +1,105 @@
++using System;
++using System.Collections.Generic;
++using UnityEngine;
++
++/// <summary>
++/// РЈРЅРёРІРµСЂСЃР°Р»СЊРЅР°СЏ СЃРёСЃС‚РµРјР° СЃС‚Р°С‚СѓСЃРЅС‹С… СЌС„С„РµРєС‚РѕРІ (Р±Р°С„С„С‹/РґРµР±Р°С„С„С‹).
++/// РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ Рё РёРіСЂРѕРєРѕРј, Рё РІСЂР°РіР°РјРё вЂ” РІРјРµСЃС‚Рѕ РґСѓР±Р»РёСЂСѓСЋС‰РµРіРѕ РєРѕРґР°.
++/// </summary>
++public class StatusEffectSystem : MonoBehaviour
++{
++    private readonly List<StatusEffect> activeEffects = new List<StatusEffect>();
++
++    public event Action<StatusEffect> OnEffectApplied;
++    public event Action<StatusEffect> OnEffectExpired;
++
++    public IReadOnlyList<StatusEffect> ActiveEffects => activeEffects;
++
++    private void Update()
++    {
++        for (int i = activeEffects.Count - 1; i >= 0; i--)
++        {
++            activeEffects[i].timer -= Time.deltaTime;
++            if (activeEffects[i].timer <= 0f)
++            {
++                var expired = activeEffects[i];
++                activeEffects.RemoveAt(i);
++                OnEffectExpired?.Invoke(expired);
++            }
++        }
++    }
++
++    /// <summary>
++    /// РќР°РєР»Р°РґС‹РІР°РµС‚ РєРѕРїРёСЋ СЌС„С„РµРєС‚Р° (С‡С‚РѕР±С‹ SO-С€Р°Р±Р»РѕРЅ РЅРµ РјРµРЅСЏР»СЃСЏ).
++    /// РџРѕРІС‚РѕСЂРЅР°СЏ РЅР°РєР»Р°РґС‹РІР°РЅРёРµ refreshing РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ РѕРґРЅРѕРёРјС‘РЅРЅРѕРіРѕ СЌС„С„РµРєС‚Р°.
++    /// </summary>
++    public void AddEffect(StatusEffect template)
++    {
++        if (template == null) return;
++
++        // Р•СЃР»Рё С‚Р°РєРѕР№ СЌС„С„РµРєС‚ СѓР¶Рµ РµСЃС‚СЊ вЂ” РѕР±РЅРѕРІР»СЏРµРј С‚Р°Р№РјРµСЂ Рё РїР°СЂР°РјРµС‚СЂС‹
++        foreach (var existing in activeEffects)
++        {
++            if (existing.effectName == template.effectName)
++            {
++                existing.timer = template.duration;
++                existing.speedMultiplier = template.speedMultiplier;
++                existing.damageMultiplier = template.damageMultiplier;
++                OnEffectApplied?.Invoke(existing);
++                return;
++            }
++        }
++
++        StatusEffect instance = new StatusEffect
++        {
++            effectName = template.effectName,
++            duration = template.duration,
++            speedMultiplier = template.speedMultiplier,
++            damageMultiplier = template.damageMultiplier
++        };
++        instance.timer = instance.duration;
++        activeEffects.Add(instance);
++        OnEffectApplied?.Invoke(instance);
++    }
++
++    public bool HasEffect(string effectName)
++    {
++        foreach (var e in activeEffects)
++            if (e.effectName == effectName) return true;
++        return false;
++    }
++
++    public void RemoveEffect(string effectName)
++    {
++        for (int i = activeEffects.Count - 1; i >= 0; i--)
++        {
++            if (activeEffects[i].effectName == effectName)
++            {
++                var removed = activeEffects[i];
++                activeEffects.RemoveAt(i);
++                OnEffectExpired?.Invoke(removed);
++            }
++        }
++    }
++
++    public void ClearEffects()
++    {
++        activeEffects.Clear();
++    }
++
++    /// <summary>РџСЂРѕРёР·РІРµРґРµРЅРёРµ РјРЅРѕР¶РёС‚РµР»РµР№ СЃРєРѕСЂРѕСЃС‚Рё РІСЃРµС… Р°РєС‚РёРІРЅС‹С… СЌС„С„РµРєС‚РѕРІ.</summary>
++    public float GetSpeedMultiplier()
++    {
++        float mult = 1f;
++        foreach (var eff in activeEffects) mult *= eff.speedMultiplier;
++        return mult;
++    }
++
++    /// <summary>РџСЂРѕРёР·РІРµРґРµРЅРёРµ РјРЅРѕР¶РёС‚РµР»РµР№ СѓСЂРѕРЅР° РІСЃРµС… Р°РєС‚РёРІРЅС‹С… СЌС„С„РµРєС‚РѕРІ.</summary>
++    public float GetDamageMultiplier()
++    {
++        float mult = 1f;
++        foreach (var eff in activeEffects) mult *= eff.damageMultiplier;
++        return mult;
++    }
++}
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/CloneController.cs b/Assets/Scripts/PlayerLogic/magic/core/CloneController.cs
+index befcc9d..b0eadde 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/CloneController.cs
++++ b/Assets/Scripts/PlayerLogic/magic/core/CloneController.cs
+@@ -21,7 +21,7 @@ public class CloneController : MonoBehaviour
+     {
+         timer += Time.deltaTime;
+ 
+-        // Клон следует за игроком
++        // РљР»РѕРЅ СЃР»РµРґСѓРµС‚ Р·Р° РёРіСЂРѕРєРѕРј
+         if (ownerCore != null)
+         {
+             Vector3 targetPos = ownerCore.transform.position + Vector3.right * 3;
+@@ -29,7 +29,7 @@ public class CloneController : MonoBehaviour
+             transform.rotation = ownerCore.transform.rotation;
+         }
+ 
+-        // Автоуничтожение
++        // РђРІС‚РѕСѓРЅРёС‡С‚РѕР¶РµРЅРёРµ
+         if (timer >= duration)
+         {
+             Destroy(gameObject);
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/CoreAbilityBase.cs b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/CoreAbilityBase.cs
+index b4e969c..2c4d806 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/CoreAbilityBase.cs	
++++ b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/CoreAbilityBase.cs	
+@@ -6,51 +6,63 @@ public abstract class CoreAbilityBase : ScriptableObject
+     public enum AbilityType { Regeneration, Combat, BuffDebuff, Ultimate }
+     public enum HeatLevel { Low, Medium, High, Critical }
+ 
+-    [Header("Основное")]
++    [Header("РћСЃРЅРѕРІРЅРѕРµ")]
+     public string abilityName = "New Ability";
+     public string description = "";
+     public AbilityType abilityType;
+     public Sprite icon;
+ 
+-    [Header("Настройки")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё")]
+     public int energyCost = 20;
+     public float cooldown = 10f;
+     public HeatLevel heatLevel = HeatLevel.Medium;
+ 
+-    [Header("Нагрев ядра")]
+-    public float heatGenerated = 10f; // Сколько тепла добавляет способность
++    [Header("РќР°РіСЂРµРІ СЏРґСЂР°")]
++    public float heatGenerated = 10f; // РЎРєРѕР»СЊРєРѕ С‚РµРїР»Р° РґРѕР±Р°РІР»СЏРµС‚ СЃРїРѕСЃРѕР±РЅРѕСЃС‚СЊ
+ 
+-    // Событие активации
++    [System.NonSerialized] private float cooldownEndTime;
++
++    // РЎРѕР±С‹С‚РёРµ Р°РєС‚РёРІР°С†РёРё
+     public event Action<CoreAbilityBase> OnAbilityActivated;
+ 
++    /// <summary>РћСЃС‚Р°Р»РѕСЃСЊ СЃРµРєСѓРЅРґ РґРѕ РіРѕС‚РѕРІРЅРѕСЃС‚Рё СЃРїРѕСЃРѕР±РЅРѕСЃС‚Рё.</summary>
++    public float CooldownRemaining => Mathf.Max(0f, cooldownEndTime - Time.time);
++    public bool IsOnCooldown => CooldownRemaining > 0f;
++
++    private void StartCooldown()
++    {
++        cooldownEndTime = Time.time + cooldown;
++    }
++
+     /// <summary>
+-    /// Активировать способность
++    /// РђРєС‚РёРІРёСЂРѕРІР°С‚СЊ СЃРїРѕСЃРѕР±РЅРѕСЃС‚СЊ
+     /// </summary>
+     public void Activate(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
+     {
+         if (CanActivate(core))
+         {
+             Execute(core, stateManager, movement);
++            StartCooldown();
+             OnAbilityActivated?.Invoke(this);
+-            Debug.Log($"[ЯДРО] Активировано: {abilityName}");
++            Debug.Log($"[РЇР”Р Рћ] РђРєС‚РёРІРёСЂРѕРІР°РЅРѕ: {abilityName}");
+         }
+     }
+ 
+     /// <summary>
+-    /// Можно ли активировать
++    /// РњРѕР¶РЅРѕ Р»Рё Р°РєС‚РёРІРёСЂРѕРІР°С‚СЊ
+     /// </summary>
+     public virtual bool CanActivate(PlayerCore core)
+     {
+-        return core.CurrentEnergy >= energyCost && !core.IsOverheated;
++        return core.CurrentEnergy >= energyCost && !core.IsOverheated && !IsOnCooldown;
+     }
+ 
+     /// <summary>
+-    /// Выполнить способность (переопределяется в наследниках)
++    /// Р’С‹РїРѕР»РЅРёС‚СЊ СЃРїРѕСЃРѕР±РЅРѕСЃС‚СЊ (РїРµСЂРµРѕРїСЂРµРґРµР»СЏРµС‚СЃСЏ РІ РЅР°СЃР»РµРґРЅРёРєР°С…)
+     /// </summary>
+     protected abstract void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement);
+ 
+     /// <summary>
+-    /// Получить цвет ядра для этой способности
++    /// РџРѕР»СѓС‡РёС‚СЊ С†РІРµС‚ СЏРґСЂР° РґР»СЏ СЌС‚РѕР№ СЃРїРѕСЃРѕР±РЅРѕСЃС‚Рё
+     /// </summary>
+     public Color GetCoreColor()
+     {
+@@ -59,7 +71,7 @@ public abstract class CoreAbilityBase : ScriptableObject
+             case AbilityType.Regeneration: return Color.green;
+             case AbilityType.Combat: return Color.red;
+             case AbilityType.BuffDebuff: return Color.yellow;
+-            case AbilityType.Ultimate: return new Color(0.5f, 0f, 1f); // Фиолетовый
++            case AbilityType.Ultimate: return new Color(0.5f, 0f, 1f); // Р¤РёРѕР»РµС‚РѕРІС‹Р№
+             default: return Color.white;
+         }
+     }
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/grein/RegenerationAbility.cs b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/grein/RegenerationAbility.cs
+index f492a04..91cad48 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/grein/RegenerationAbility.cs	
++++ b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/grein/RegenerationAbility.cs	
+@@ -3,16 +3,16 @@ using UnityEngine;
+ [CreateAssetMenu(fileName = "RegenerationAbility", menuName = "Core Abilities/Regeneration")]
+ public class RegenerationAbility : CoreAbilityBase
+ {
+-    [Header("Регенерация")]
+-    [SerializeField] private bool prioritizeCritical = true; // Приоритет голове/торсу/ядру
++    [Header("Р РµРіРµРЅРµСЂР°С†РёСЏ")]
++    [SerializeField] private bool prioritizeCritical = true; // РџСЂРёРѕСЂРёС‚РµС‚ РіРѕР»РѕРІРµ/С‚РѕСЂСЃСѓ/СЏРґСЂСѓ
+     [SerializeField] private int healAmount = 50;
+ 
+     public RegenerationAbility()
+     {
+-        abilityName = "Регенерация";
++        abilityName = "Р РµРіРµРЅРµСЂР°С†РёСЏ";
+         abilityType = AbilityType.Regeneration;
+         energyCost = 30;
+-        heatGenerated = 5f; // Малый нагрев
++        heatGenerated = 5f; // РњР°Р»С‹Р№ РЅР°РіСЂРµРІ
+     }
+ 
+     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
+@@ -21,11 +21,11 @@ public class RegenerationAbility : CoreAbilityBase
+ 
+         if (prioritizeCritical)
+         {
+-            // Ищем самую важную сломанную часть
++            // РС‰РµРј СЃР°РјСѓСЋ РІР°Р¶РЅСѓСЋ СЃР»РѕРјР°РЅРЅСѓСЋ С‡Р°СЃС‚СЊ
+             targetPart = FindCriticalBrokenPart(stateManager);
+         }
+ 
+-        // Если нет критических, ищем самую поврежденную
++        // Р•СЃР»Рё РЅРµС‚ РєСЂРёС‚РёС‡РµСЃРєРёС…, РёС‰РµРј СЃР°РјСѓСЋ РїРѕРІСЂРµР¶РґРµРЅРЅСѓСЋ
+         if (targetPart == null)
+         {
+             targetPart = FindMostDamagedPart(stateManager);
+@@ -35,30 +35,30 @@ public class RegenerationAbility : CoreAbilityBase
+         {
+             targetPart.RepairWithCore();
+ 
+-            // Визуальный эффект регенерации
++            // Р’РёР·СѓР°Р»СЊРЅС‹Р№ СЌС„С„РµРєС‚ СЂРµРіРµРЅРµСЂР°С†РёРё
+             if (core.CoreVisual != null)
+             {
+                 core.CoreVisual.PlayRegenerationEffect(targetPart.transform.position);
+             }
+ 
+-            Debug.Log($"[РЕГЕНЕРАЦИЯ] Восстановлена: {targetPart.PartName}");
++            Debug.Log($"[Р Р•Р“Р•РќР•Р РђР¦РРЇ] Р’РѕСЃСЃС‚Р°РЅРѕРІР»РµРЅР°: {targetPart.PartName}");
+         }
+         else
+         {
+-            Debug.Log("[РЕГЕНЕРАЦИЯ] Все конечности целы!");
++            Debug.Log("[Р Р•Р“Р•РќР•Р РђР¦РРЇ] Р’СЃРµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё С†РµР»С‹!");
+         }
+     }
+ 
+     private BodyPart FindCriticalBrokenPart(PlayerStateManager stateManager)
+     {
+-        // Приоритет: Голова > Торс > Ядро > Остальное
++        // РџСЂРёРѕСЂРёС‚РµС‚: Р“РѕР»РѕРІР° > РўРѕСЂСЃ > РЇРґСЂРѕ > РћСЃС‚Р°Р»СЊРЅРѕРµ
+         if (stateManager.Head != null && stateManager.Head.IsBroken)
+             return stateManager.Head;
+ 
+         if (stateManager.Torso != null && stateManager.Torso.IsBroken)
+             return stateManager.Torso;
+ 
+-        // Ядро не может быть сломано (оно либо цело, либо оторвано)
++        // РЇРґСЂРѕ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ СЃР»РѕРјР°РЅРѕ (РѕРЅРѕ Р»РёР±Рѕ С†РµР»Рѕ, Р»РёР±Рѕ РѕС‚РѕСЂРІР°РЅРѕ)
+ 
+         return null;
+     }
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/purple/CloneAbility.cs b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/purple/CloneAbility.cs
+index 3fed7f9..3d9dcfb 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/purple/CloneAbility.cs	
++++ b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/purple/CloneAbility.cs	
+@@ -3,28 +3,28 @@ using UnityEngine;
+ [CreateAssetMenu(fileName = "CloneAbility", menuName = "Core Abilities/Ultimate/Clone")]
+ public class CloneAbility : CoreAbilityBase
+ {
+-    [Header("Клон")]
++    [Header("РљР»РѕРЅ")]
+     [SerializeField] private GameObject clonePrefab;
+     [SerializeField] private float cloneDuration = 30f;
+-    [SerializeField] private float cloneDamageMultiplier = 0.5f; // Урон клона / 2
++    [SerializeField] private float cloneDamageMultiplier = 0.5f; // РЈСЂРѕРЅ РєР»РѕРЅР° / 2
+ 
+     public CloneAbility()
+     {
+-        abilityName = "Клонирование";
++        abilityName = "РљР»РѕРЅРёСЂРѕРІР°РЅРёРµ";
+         abilityType = AbilityType.Ultimate;
+         energyCost = 80;
+-        heatGenerated = 80f; // Очень высокий нагрев
++        heatGenerated = 80f; // РћС‡РµРЅСЊ РІС‹СЃРѕРєРёР№ РЅР°РіСЂРµРІ
+     }
+ 
+     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
+     {
+         if (clonePrefab == null)
+         {
+-            Debug.LogError("[КЛОН] Префаб клона не назначен!");
++            Debug.LogError("[РљР›РћРќ] РџСЂРµС„Р°Р± РєР»РѕРЅР° РЅРµ РЅР°Р·РЅР°С‡РµРЅ!");
+             return;
+         }
+ 
+-        // Создаем клона
++        // РЎРѕР·РґР°РµРј РєР»РѕРЅР°
+         GameObject clone = Instantiate(clonePrefab, core.transform.position + Vector3.right * 2, core.transform.rotation);
+ 
+         CloneController cloneController = clone.GetComponent<CloneController>();
+@@ -33,9 +33,9 @@ public class CloneAbility : CoreAbilityBase
+             cloneController.Setup(core, stateManager, cloneDuration, cloneDamageMultiplier);
+         }
+ 
+-        // Уничтожаем клона через duration
++        // РЈРЅРёС‡С‚РѕР¶Р°РµРј РєР»РѕРЅР° С‡РµСЂРµР· duration
+         Destroy(clone, cloneDuration);
+ 
+-        Debug.Log($"[УЛЬТИМЕЙТ] Клон создан на {cloneDuration} сек!");
++        Debug.Log($"[РЈР›Р¬РўРРњР•Р™Рў] РљР»РѕРЅ СЃРѕР·РґР°РЅ РЅР° {cloneDuration} СЃРµРє!");
+     }
+ }
+\ No newline at end of file
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/purple/ReviveAbility.cs b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/purple/ReviveAbility.cs
+index 590f60b..447517b 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/purple/ReviveAbility.cs	
++++ b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/purple/ReviveAbility.cs	
+@@ -3,26 +3,26 @@ using UnityEngine;
+ [CreateAssetMenu(fileName = "ReviveAbility", menuName = "Core Abilities/Ultimate/Revive")]
+ public class ReviveAbility : CoreAbilityBase
+ {
+-    [Header("Возрождение")]
++    [Header("Р’РѕР·СЂРѕР¶РґРµРЅРёРµ")]
+     [SerializeField] private float invincibilityDuration = 5f;
+ 
+     public ReviveAbility()
+     {
+-        abilityName = "Возрождение";
++        abilityName = "Р’РѕР·СЂРѕР¶РґРµРЅРёРµ";
+         abilityType = AbilityType.Ultimate;
+-        energyCost = 100; // Максимальная стоимость
+-        heatGenerated = 100f; // Максимальный нагрев!
++        energyCost = 100; // РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ СЃС‚РѕРёРјРѕСЃС‚СЊ
++        heatGenerated = 100f; // РњР°РєСЃРёРјР°Р»СЊРЅС‹Р№ РЅР°РіСЂРµРІ!
+     }
+ 
+     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
+     {
+-        // Сохраняем позицию смерти
++        // РЎРѕС…СЂР°РЅСЏРµРј РїРѕР·РёС†РёСЋ СЃРјРµСЂС‚Рё
+         Vector3 deathPosition = core.transform.position;
+ 
+-        // Возрождаем игрока
++        // Р’РѕР·СЂРѕР¶РґР°РµРј РёРіСЂРѕРєР°
+         stateManager.Revive();
+ 
+-        // Восстанавливаем все конечности
++        // Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РІСЃРµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё
+         foreach (var part in stateManager.BodyParts)
+         {
+             if (part != null && part.State != BodyPart.PartState.Severed)
+@@ -31,18 +31,18 @@ public class ReviveAbility : CoreAbilityBase
+             }
+         }
+ 
+-        // Телепортируем на место смерти
++        // РўРµР»РµРїРѕСЂС‚РёСЂСѓРµРј РЅР° РјРµСЃС‚Рѕ СЃРјРµСЂС‚Рё
+         core.transform.position = deathPosition;
+ 
+-        // Даем неуязвимость
++        // Р”Р°РµРј РЅРµСѓСЏР·РІРёРјРѕСЃС‚СЊ
+         core.ApplyInvincibility(invincibilityDuration);
+ 
+-        // Визуальный эффект
++        // Р’РёР·СѓР°Р»СЊРЅС‹Р№ СЌС„С„РµРєС‚
+         if (core.CoreVisual != null)
+         {
+             core.CoreVisual.PlayUltimateEffect();
+         }
+ 
+-        Debug.Log($"[УЛЬТИМЕЙТ] Возрождение! Неуязвимость на {invincibilityDuration} сек!");
++        Debug.Log($"[РЈР›Р¬РўРРњР•Р™Рў] Р’РѕР·СЂРѕР¶РґРµРЅРёРµ! РќРµСѓСЏР·РІРёРјРѕСЃС‚СЊ РЅР° {invincibilityDuration} СЃРµРє!");
+     }
+ }
+\ No newline at end of file
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/red/ChainsawAbility.cs b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/red/ChainsawAbility.cs
+index 417b8b2..c46f376 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/red/ChainsawAbility.cs	
++++ b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/red/ChainsawAbility.cs	
+@@ -3,8 +3,8 @@ using UnityEngine;
+ [CreateAssetMenu(fileName = "ChainsawAbility", menuName = "Core Abilities/Combat/Chainsaw")]
+ public class ChainsawAbility : CoreAbilityBase
+ {
+-    [Header("Бензопила")]
+-    [SerializeField] private float chainsawDamage = 10f; // Урон в секунду
++    [Header("Р‘РµРЅР·РѕРїРёР»Р°")]
++    [SerializeField] private float chainsawDamage = 10f; // РЈСЂРѕРЅ РІ СЃРµРєСѓРЅРґСѓ
+     [SerializeField] private float duration = 3f;
+     [SerializeField] private float attackRadius = 1.5f;
+     [SerializeField] private LayerMask enemyMask;
+@@ -13,36 +13,36 @@ public class ChainsawAbility : CoreAbilityBase
+ 
+     public ChainsawAbility()
+     {
+-        abilityName = "Бензопила";
++        abilityName = "Р‘РµРЅР·РѕРїРёР»Р°";
+         abilityType = AbilityType.Combat;
+         energyCost = 20;
+-        heatGenerated = 20f; // Высокий нагрев
++        heatGenerated = 20f; // Р’С‹СЃРѕРєРёР№ РЅР°РіСЂРµРІ
+     }
+ 
+     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
+     {
+         if (stateManager.LeftArm == null || !stateManager.LeftArm.IsActive)
+         {
+-            Debug.Log("[БЕНЗОПИЛА] Левая рука отсутствует!");
++            Debug.Log("[Р‘Р•РќР—РћРџРР›Рђ] Р›РµРІР°СЏ СЂСѓРєР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚!");
+             return;
+         }
+ 
+-        // Запускаем бензопилу на duration секунд
++        // Р—Р°РїСѓСЃРєР°РµРј Р±РµРЅР·РѕРїРёР»Сѓ РЅР° duration СЃРµРєСѓРЅРґ
+         core.StartCoroutine(ChainsawCoroutine(core, stateManager));
+     }
+ 
+     private System.Collections.IEnumerator ChainsawCoroutine(PlayerCore core, PlayerStateManager stateManager)
+     {
+         float timer = 0f;
+-        float damageInterval = 0.5f; // Урон каждые 0.5 сек
++        float damageInterval = 0.5f; // РЈСЂРѕРЅ РєР°Р¶РґС‹Рµ 0.5 СЃРµРє
+ 
+-        Debug.Log("[БЕНЗОПИЛА] Активирована!");
++        Debug.Log("[Р‘Р•РќР—РћРџРР›Рђ] РђРєС‚РёРІРёСЂРѕРІР°РЅР°!");
+ 
+         while (timer < duration)
+         {
+             if (timer >= damageTimer)
+             {
+-                // Наносим урон всем в радиусе
++                // РќР°РЅРѕСЃРёРј СѓСЂРѕРЅ РІСЃРµРј РІ СЂР°РґРёСѓСЃРµ
+                 Collider[] enemies = Physics.OverlapSphere(core.transform.position, attackRadius, enemyMask);
+ 
+                 foreach (var enemy in enemies)
+@@ -61,6 +61,6 @@ public class ChainsawAbility : CoreAbilityBase
+             yield return null;
+         }
+ 
+-        Debug.Log("[БЕНЗОПИЛА] Завершена!");
++        Debug.Log("[Р‘Р•РќР—РћРџРР›Рђ] Р—Р°РІРµСЂС€РµРЅР°!");
+     }
+ }
+\ No newline at end of file
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/red/LaserShotAbility.cs b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/red/LaserShotAbility.cs
+index acf540c..c70f577 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/red/LaserShotAbility.cs	
++++ b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/red/LaserShotAbility.cs	
+@@ -3,7 +3,7 @@ using UnityEngine;
+ [CreateAssetMenu(fileName = "LaserShotAbility", menuName = "Core Abilities/Combat/Laser Shot")]
+ public class LaserShotAbility : CoreAbilityBase
+ {
+-    [Header("Лазер")]
++    [Header("Р›Р°Р·РµСЂ")]
+     [SerializeField] private float laserDamage = 30f;
+     [SerializeField] private float laserRange = 50f;
+     [SerializeField] private LayerMask enemyMask;
+@@ -12,35 +12,35 @@ public class LaserShotAbility : CoreAbilityBase
+ 
+     public LaserShotAbility()
+     {
+-        abilityName = "Лазерный выстрел";
++        abilityName = "Р›Р°Р·РµСЂРЅС‹Р№ РІС‹СЃС‚СЂРµР»";
+         abilityType = AbilityType.Combat;
+         energyCost = 25;
+-        heatGenerated = 15f; // Средний нагрев
++        heatGenerated = 15f; // РЎСЂРµРґРЅРёР№ РЅР°РіСЂРµРІ
+     }
+ 
+     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
+     {
+-        // Проверяем, есть ли правая рука (для лазера)
++        // РџСЂРѕРІРµСЂСЏРµРј, РµСЃС‚СЊ Р»Рё РїСЂР°РІР°СЏ СЂСѓРєР° (РґР»СЏ Р»Р°Р·РµСЂР°)
+         if (stateManager.RightArm == null || !stateManager.RightArm.IsActive)
+         {
+-            Debug.Log("[ЛАЗЕР] Правая рука отсутствует!");
++            Debug.Log("[Р›РђР—Р•Р ] РџСЂР°РІР°СЏ СЂСѓРєР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚!");
+             return;
+         }
+ 
+-        // Находим цель
++        // РќР°С…РѕРґРёРј С†РµР»СЊ
+         Ray ray = new Ray(laserSpawnPoint != null ? laserSpawnPoint.position : core.transform.position,
+                          core.transform.forward);
+ 
+         if (Physics.Raycast(ray, out RaycastHit hit, laserRange, enemyMask))
+         {
+-            // Наносим урон
++            // РќР°РЅРѕСЃРёРј СѓСЂРѕРЅ
+             if (hit.collider.TryGetComponent<IDamageable>(out IDamageable damageable))
+             {
+                 damageable.TakeDamage(Mathf.RoundToInt(laserDamage), hit.point - ray.origin);
+-                Debug.Log($"[ЛАЗЕР] Урон {laserDamage} по {hit.collider.name}");
++                Debug.Log($"[Р›РђР—Р•Р ] РЈСЂРѕРЅ {laserDamage} РїРѕ {hit.collider.name}");
+             }
+ 
+-            // Визуальный эффект лазера
++            // Р’РёР·СѓР°Р»СЊРЅС‹Р№ СЌС„С„РµРєС‚ Р»Р°Р·РµСЂР°
+             if (laserPrefab != null)
+             {
+                 GameObject laser = Instantiate(laserPrefab, laserSpawnPoint.position, Quaternion.identity);
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/yellow/EnhancedRegenBuff.cs b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/yellow/EnhancedRegenBuff.cs
+index c8b7020..568012b 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/yellow/EnhancedRegenBuff.cs	
++++ b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/yellow/EnhancedRegenBuff.cs	
+@@ -3,24 +3,24 @@ using UnityEngine;
+ [CreateAssetMenu(fileName = "EnhancedRegenBuff", menuName = "Core Abilities/Buff/Enhanced Regeneration")]
+ public class EnhancedRegenBuff : CoreAbilityBase
+ {
+-    [Header("Баф")]
++    [Header("Р‘Р°С„")]
+     [SerializeField] private float duration = 10f;
+-    [SerializeField] private float regenMultiplier = 2f; // x2 регенерация
++    [SerializeField] private float regenMultiplier = 2f; // x2 СЂРµРіРµРЅРµСЂР°С†РёСЏ
+ 
+     public EnhancedRegenBuff()
+     {
+-        abilityName = "Усиленная регенерация";
++        abilityName = "РЈСЃРёР»РµРЅРЅР°СЏ СЂРµРіРµРЅРµСЂР°С†РёСЏ";
+         abilityType = AbilityType.BuffDebuff;
+         energyCost = 15;
+-        heatGenerated = 8f; // Малый нагрев
++        heatGenerated = 8f; // РњР°Р»С‹Р№ РЅР°РіСЂРµРІ
+     }
+ 
+     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
+     {
+-        // Добавляем баф усиленной регенерации
++        // Р”РѕР±Р°РІР»СЏРµРј Р±Р°С„ СѓСЃРёР»РµРЅРЅРѕР№ СЂРµРіРµРЅРµСЂР°С†РёРё
+         StatusEffect buff = new StatusEffect
+         {
+-            effectName = "Усиленная регенерация",
++            effectName = "РЈСЃРёР»РµРЅРЅР°СЏ СЂРµРіРµРЅРµСЂР°С†РёСЏ",
+             duration = duration,
+             speedMultiplier = 1f,
+             damageMultiplier = 1f
+@@ -28,12 +28,12 @@ public class EnhancedRegenBuff : CoreAbilityBase
+ 
+         stateManager.AddEffect(buff);
+ 
+-        // Визуальный эффект
++        // Р’РёР·СѓР°Р»СЊРЅС‹Р№ СЌС„С„РµРєС‚
+         if (core.CoreVisual != null)
+         {
+             core.CoreVisual.PlayBuffEffect(Color.yellow);
+         }
+ 
+-        Debug.Log($"[БАФ] Усиленная регенерация на {duration} сек!");
++        Debug.Log($"[Р‘РђР¤] РЈСЃРёР»РµРЅРЅР°СЏ СЂРµРіРµРЅРµСЂР°С†РёСЏ РЅР° {duration} СЃРµРє!");
+     }
+ }
+\ No newline at end of file
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/yellow/WeaknessDebuff.cs b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/yellow/WeaknessDebuff.cs
+index 45730cd..a2197a1 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/yellow/WeaknessDebuff.cs	
++++ b/Assets/Scripts/PlayerLogic/magic/core/Core Abilities/yellow/WeaknessDebuff.cs	
+@@ -3,13 +3,13 @@ using UnityEngine;
+ [CreateAssetMenu(fileName = "WeaknessDebuff", menuName = "Core Abilities/Debuff/Weakness")]
+ public class WeaknessDebuff : CoreAbilityBase
+ {
+-    [Header("Дебаф")]
++    [Header("Р”РµР±Р°С„")]
+     [SerializeField] private float duration = 15f;
+-    [SerializeField] private float damageMultiplier = 0.5f; // Урон врага / 2
++    [SerializeField] private float damageMultiplier = 0.5f; // РЈСЂРѕРЅ РІСЂР°РіР° / 2
+ 
+     public WeaknessDebuff()
+     {
+-        abilityName = "Слабость";
++        abilityName = "РЎР»Р°Р±РѕСЃС‚СЊ";
+         abilityType = AbilityType.BuffDebuff;
+         energyCost = 20;
+         heatGenerated = 10f;
+@@ -17,12 +17,12 @@ public class WeaknessDebuff : CoreAbilityBase
+ 
+     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
+     {
+-        // Находим ближайшего врага
++        // РќР°С…РѕРґРёРј Р±Р»РёР¶Р°Р№С€РµРіРѕ РІСЂР°РіР°
+         Collider[] enemies = Physics.OverlapSphere(core.transform.position, 20f, LayerMask.GetMask("Enemy"));
+ 
+         if (enemies.Length > 0)
+         {
+-            // Применяем дебаф к ближайшему врагу
++            // РџСЂРёРјРµРЅСЏРµРј РґРµР±Р°С„ Рє Р±Р»РёР¶Р°Р№С€РµРјСѓ РІСЂР°РіСѓ
+             EnemyStateManager nearestEnemy = null;
+             float nearestDistance = Mathf.Infinity;
+ 
+@@ -43,7 +43,7 @@ public class WeaknessDebuff : CoreAbilityBase
+             if (nearestEnemy != null)
+             {
+                 nearestEnemy.ApplyDamageMultiplier(damageMultiplier, duration);
+-                Debug.Log($"[ДЕБАФ] Слабость применена к {nearestEnemy.name} на {duration} сек!");
++                Debug.Log($"[Р”Р•Р‘РђР¤] РЎР»Р°Р±РѕСЃС‚СЊ РїСЂРёРјРµРЅРµРЅР° Рє {nearestEnemy.name} РЅР° {duration} СЃРµРє!");
+             }
+         }
+     }
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/CoreOverheatSystem.cs b/Assets/Scripts/PlayerLogic/magic/core/CoreOverheatSystem.cs
+index b110cd4..db66b5f 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/CoreOverheatSystem.cs
++++ b/Assets/Scripts/PlayerLogic/magic/core/CoreOverheatSystem.cs
+@@ -5,72 +5,122 @@ public class CoreOverheatSystem : MonoBehaviour
+ {
+     public enum CoreState { Active, Overheated, Charging }
+ 
+-    [Header("Настройки нагрева")]
++    [Header("РќР°СЃС‚СЂРѕР№РєРё РЅР°РіСЂРµРІР°")]
+     [SerializeField] private float maxHeat = 100f;
+-    [SerializeField] private float coolingRate = 10f; // Увеличил скорость
++    [SerializeField] private float coolingRate = 15f; // Г—1.5 Рє СЃРєРѕСЂРѕСЃС‚Рё РѕСЃС‚С‹РІР°РЅРёСЏ (Р±С‹Р»Рѕ 10)
+     [SerializeField] private float overheatThreshold = 80f;
+ 
+-    [Header("Продвинутое охлаждение")]
+-    [SerializeField] private float advancedCoolingRate = 20f;
++    [Header("РџСЂРѕРґРІРёРЅСѓС‚РѕРµ РѕС…Р»Р°Р¶РґРµРЅРёРµ")]
++    [SerializeField] private float advancedCoolingRate = 30f; // Г—1.5 (Р±С‹Р»Рѕ 20)
+     [SerializeField] private bool hasAdvancedCooling = false;
+ 
++    [Header("Р›РѕРіРёСЂРѕРІР°РЅРёРµ СЃРѕСЃС‚РѕСЏРЅРёСЏ СЏРґСЂР°")]
++    [SerializeField] private bool logStateChanges = true;
++
++    [Header("РџРµСЂРёРѕРґРёС‡РµСЃРєРёР№ Р»РѕРі РІ РєРѕРЅСЃРѕР»СЊ")]
++    [Tooltip("РљР°Рє С‡Р°СЃС‚Рѕ РїРµС‡Р°С‚Р°С‚СЊ С‚РµРєСѓС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ СЏРґСЂР° РІ Console (СЃРµРє). 0 вЂ” РІС‹РєР»СЋС‡РёС‚СЊ РїРµСЂРёРѕРґРёС‡РµСЃРєРёР№ Р»РѕРі.")]
++    [SerializeField] private float stateLogInterval = 1f;
++
+     private float currentHeat;
+     private bool isOverheated;
+     private CoreState coreState = CoreState.Active;
++    private float periodicLogTimer;
+ 
+     public float CurrentHeat => currentHeat;
+     public float HeatPercent => maxHeat > 0 ? currentHeat / maxHeat : 0;
+     public bool IsOverheated => isOverheated;
+     public float MaxHeat => maxHeat;
++    public float CoolingRate => coolingRate;
+     public CoreState State => coreState;
+ 
+     public event Action<float> OnHeatChanged;
+     public event Action OnOverheated;
+     public event Action OnCooled;
++    public event Action<CoreState> OnStateChanged;
++
++    private void Awake()
++    {
++        LogState($"РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ: {coreState}, С‚РµРїР»Рѕ {currentHeat}/{maxHeat}, РѕСЃС‚С‹РІР°РЅРёРµ {coolingRate}/СЃРµРє");
++    }
+ 
+     private void Update()
+     {
+         HandleCooling();
++        HandlePeriodicLog();
++    }
++
++    private void HandlePeriodicLog()
++    {
++        if (!logStateChanges || stateLogInterval <= 0f) return;
++
++        periodicLogTimer += Time.deltaTime;
++        if (periodicLogTimer >= stateLogInterval)
++        {
++            periodicLogTimer = 0f;
++            float rate = isOverheated
++                ? (hasAdvancedCooling ? advancedCoolingRate : coolingRate * 2f)
++                : coolingRate;
++            LogState($"[РїРµСЂРёРѕРґРёС‡РµСЃРєРёР№] С‚РµРїР»Рѕ {currentHeat:F1}/{maxHeat}, РѕСЃС‚С‹РІР°РЅРёРµ {rate}/СЃРµРє, ~{Mathf.CeilToInt(currentHeat / Mathf.Max(0.01f, rate))} СЃРµРє РґРѕ РЅСѓР»СЏ");
++        }
++    }
++
++    private void SetState(CoreState newState, string reason)
++    {
++        if (coreState == newState) return;
++        coreState = newState;
++        LogState($"{newState} ({reason}). РўРµРїР»Рѕ: {currentHeat:F1}/{maxHeat}");
++        OnStateChanged?.Invoke(newState);
++    }
++
++    private void LogState(string message)
++    {
++        if (logStateChanges)
++            Debug.Log($"[РЇР”Р Рћ][{coreState}] {message}");
+     }
+ 
+     private void HandleCooling()
+     {
+         if (currentHeat > 0)
+         {
+-            // Определяем скорость охлаждения
++            // РћРїСЂРµРґРµР»СЏРµРј СЃРєРѕСЂРѕСЃС‚СЊ РѕС…Р»Р°Р¶РґРµРЅРёСЏ
+             float rate = coolingRate;
+ 
+-            // Если перегрет — используем продвинутое охлаждение
++            // Р•СЃР»Рё РїРµСЂРµРіСЂРµС‚ вЂ” РёСЃРїРѕР»СЊР·СѓРµРј РїСЂРѕРґРІРёРЅСѓС‚РѕРµ РѕС…Р»Р°Р¶РґРµРЅРёРµ
+             if (isOverheated)
+             {
+                 rate = hasAdvancedCooling ? advancedCoolingRate : coolingRate * 2f;
+             }
+ 
+-            // Охлаждаем
++            // РћС…Р»Р°Р¶РґР°РµРј
+             currentHeat -= rate * Time.deltaTime;
+ 
+-            // Проверяем минимальное значение
++            // Р•СЃР»Рё Р±С‹Р»Рѕ РїРµСЂРµРіСЂРµС‚Рѕ, РЅРѕ С‚РµРїР»Рѕ СѓРїР°Р»Рѕ РЅРёР¶Рµ РїРѕСЂРѕРіР° вЂ” СЃРЅРёРјР°РµРј РїРµСЂРµРіСЂРµРІ
++            if (isOverheated && currentHeat <= overheatThreshold)
++            {
++                currentHeat = Mathf.Max(0, currentHeat);
++                isOverheated = false;
++                SetState(CoreState.Active, "С‚РµРјРїРµСЂР°С‚СѓСЂР° СѓРїР°Р»Р° РЅРёР¶Рµ РїРѕСЂРѕРіР°");
++                OnCooled?.Invoke();
++                OnHeatChanged?.Invoke(currentHeat);
++                return;
++            }
++
++            // РџСЂРѕРІРµСЂСЏРµРј РјРёРЅРёРјР°Р»СЊРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ
+             if (currentHeat <= 0)
+             {
+                 currentHeat = 0;
+ 
+-                // Если было перегрето — снимаем статус
++                // Р•СЃР»Рё Р±С‹Р»Рѕ РїРµСЂРµРіСЂРµС‚Рѕ вЂ” СЃРЅРёРјР°РµРј СЃС‚Р°С‚СѓСЃ
+                 if (isOverheated)
+                 {
+                     isOverheated = false;
+-                    coreState = CoreState.Active;
+-                    Debug.Log("[ЯДРО] Остыло! Ядро активно.");
++                    SetState(CoreState.Active, "СЏРґСЂРѕ РїРѕР»РЅРѕСЃС‚СЊСЋ РѕСЃС‚С‹Р»Рѕ");
+                     OnCooled?.Invoke();
+                 }
+-            }
+-
+-            // Если было перегрето, но тепло упало ниже порога
+-            if (isOverheated && currentHeat < overheatThreshold * 0.5f)
+-            {
+-                isOverheated = false;
+-                coreState = CoreState.Active;
+-                Debug.Log("[ЯДРО] Температура нормализовалась!");
+-                OnCooled?.Invoke();
++                else
++                {
++                    LogState($"РџРѕР»РЅРѕСЃС‚СЊСЋ РѕСЃС‚С‹Р»Рѕ. РўРµРїР»Рѕ: 0/{maxHeat}");
++                }
+             }
+ 
+             OnHeatChanged?.Invoke(currentHeat);
+@@ -82,13 +132,12 @@ public class CoreOverheatSystem : MonoBehaviour
+         currentHeat += amount;
+         currentHeat = Mathf.Min(maxHeat, currentHeat);
+ 
+-        Debug.Log($"[ЯДРО] Нагрев +{amount}. Текущее тепло: {currentHeat}/{maxHeat}");
++        LogState($"РќР°РіСЂРµРІ +{amount:F1}. РўРµРїР»Рѕ: {currentHeat:F1}/{maxHeat}");
+ 
+         if (currentHeat >= overheatThreshold && !isOverheated)
+         {
+             isOverheated = true;
+-            coreState = CoreState.Overheated;
+-            Debug.LogWarning($"[ЯДРО] ПЕРЕГРЕВ! Тепло: {currentHeat}");
++            SetState(CoreState.Overheated, $"РїСЂРµРІС‹С€РµРЅ РїРѕСЂРѕРі {overheatThreshold}");
+             OnOverheated?.Invoke();
+         }
+     }
+@@ -97,15 +146,14 @@ public class CoreOverheatSystem : MonoBehaviour
+     {
+         currentHeat -= amount;
+         currentHeat = Mathf.Max(0, currentHeat);
+-        Debug.Log($"[ЯДРО] Принудительное охлаждение -{amount}. Тепло: {currentHeat}");
++        LogState($"РџСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕРµ РѕС…Р»Р°Р¶РґРµРЅРёРµ -{amount:F1}. РўРµРїР»Рѕ: {currentHeat:F1}/{maxHeat}");
+     }
+ 
+     public void ResetHeat()
+     {
+         currentHeat = 0;
+         isOverheated = false;
+-        coreState = CoreState.Active;
+-        Debug.Log("[ЯДРО] Тепло сброшено!");
++        SetState(CoreState.Active, "С‚РµРїР»Рѕ СЃР±СЂРѕС€РµРЅРѕ РІСЂСѓС‡РЅСѓСЋ");
+     }
+ 
+     private void OnDrawGizmosSelected()
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/CoreUI.cs b/Assets/Scripts/PlayerLogic/magic/core/CoreUI.cs
+index 09b7930..9c26b70 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/CoreUI.cs
++++ b/Assets/Scripts/PlayerLogic/magic/core/CoreUI.cs
+@@ -4,22 +4,22 @@ using TMPro;
+ 
+ public class CoreUI : MonoBehaviour
+ {
+-    [Header("Ссылки")]
++    [Header("РЎСЃС‹Р»РєРё")]
+     [SerializeField] private PlayerCore playerCore;
+     [SerializeField] private CoreOverheatSystem overheatSystem;
+ 
+-    [Header("Элементы UI")]
++    [Header("Р­Р»РµРјРµРЅС‚С‹ UI")]
+     [SerializeField] private Slider energySlider;
+     [SerializeField] private Image energyFill;
+     [SerializeField] private TextMeshProUGUI energyText;
+     [SerializeField] private TextMeshProUGUI stateText;
+     [SerializeField] private Image coreIcon;
+ 
+-    [Header("Нагрев ядра")]
++    [Header("РќР°РіСЂРµРІ СЏРґСЂР°")]
+     [SerializeField] private Slider heatSlider;
+     [SerializeField] private Image heatFill;
+ 
+-    [Header("Цвета состояний")]
++    [Header("Р¦РІРµС‚Р° СЃРѕСЃС‚РѕСЏРЅРёР№")]
+     [SerializeField] private Color activeColor = Color.cyan;
+     [SerializeField] private Color overheatedColor = Color.red;
+     [SerializeField] private Color chargingColor = Color.yellow;
+@@ -28,7 +28,7 @@ public class CoreUI : MonoBehaviour
+     [SerializeField] private Color buffColor = Color.yellow;
+     [SerializeField] private Color ultimateColor = new Color(0.5f, 0f, 1f);
+ 
+-    [Header("Способности")]
++    [Header("РЎРїРѕСЃРѕР±РЅРѕСЃС‚Рё")]
+     [SerializeField] private CoreAbilityUI[] abilityUIs;
+ 
+     private void Update()
+@@ -42,7 +42,7 @@ public class CoreUI : MonoBehaviour
+ 
+     private void UpdateCoreDisplay()
+     {
+-        // Энергия
++        // Р­РЅРµСЂРіРёСЏ
+         if (energySlider != null)
+         {
+             energySlider.value = playerCore.EnergyPercent;
+@@ -53,27 +53,25 @@ public class CoreUI : MonoBehaviour
+             energyText.text = $"{playerCore.CurrentEnergy}/{playerCore.MaxEnergy}";
+         }
+ 
+-        // Состояние
++        // РЎРѕСЃС‚РѕСЏРЅРёРµ СЏРґСЂР°: РїРµСЂРµРіСЂРµРІ РїРѕРєР°Р·С‹РІР°РµРј РїРѕРІРµСЂС… С‚РµРјРїРµСЂР°С‚СѓСЂС‹, РЅРµСѓСЏР·РІРёРјРѕСЃС‚СЊ вЂ” РѕС‚РґРµР»СЊРЅС‹Рј С‚РµРєСЃС‚РѕРј
+         if (stateText != null)
+         {
+             if (playerCore.IsOverheated)
+             {
+-                stateText.text = "ПЕРЕГРЕВ";
+                 stateText.color = overheatedColor;
+             }
+             else if (playerCore.IsInvincible)
+             {
+-                stateText.text = "НЕУЯЗВИМОСТЬ";
++                stateText.text = "РќР•РЈРЇР—Р’РРњРћРЎРўР¬";
+                 stateText.color = ultimateColor;
+             }
+             else
+             {
+-                stateText.text = "АКТИВНО";
+                 stateText.color = activeColor;
+             }
+         }
+ 
+-        // Цвет иконки
++        // Р¦РІРµС‚ РёРєРѕРЅРєРё
+         if (coreIcon != null)
+         {
+             if (playerCore.IsOverheated)
+@@ -96,6 +94,12 @@ public class CoreUI : MonoBehaviour
+             heatSlider.value = overheatSystem.HeatPercent;
+         }
+ 
++        // РџРѕРґРїРёСЃСЊ СЃ С‚РµРєСѓС‰РёРј СЃРѕСЃС‚РѕСЏРЅРёРµРј СЏРґСЂР° Рё С‚РµРјРїРµСЂР°С‚СѓСЂРѕР№ (РІРёРґРЅРѕ Р±РµР· РєРѕРЅСЃРѕР»Рё)
++        if (stateText != null && !playerCore.IsInvincible)
++        {
++            stateText.text = $"{overheatSystem.State}  {overheatSystem.CurrentHeat:F0}/{overheatSystem.MaxHeat:F0}";
++        }
++
+         if (heatFill != null)
+         {
+             if (overheatSystem.HeatPercent > 0.8f)
+@@ -152,14 +156,18 @@ public class CoreAbilityUI : MonoBehaviour
+ 
+         if (cooldownOverlay != null)
+         {
+-            // Показываем кулдаун если способность на перезарядке
+-            // Здесь нужна логика отслеживания кулдауна
+-            cooldownOverlay.enabled = false;
++            // Р—Р°С‚РµРјРЅРµРЅРёРµ РїРѕ РѕСЃС‚Р°С‚РєСѓ РєСѓР»РґР°СѓРЅР° (fill-РјРµС‚РѕРґ Image.Vertical)
++            cooldownOverlay.enabled = true;
++            cooldownOverlay.fillAmount = ability.cooldown > 0f
++                ? ability.CooldownRemaining / ability.cooldown
++                : 0f;
+         }
+ 
+         if (cooldownText != null)
+         {
+-            cooldownText.text = abilityKey.ToString();
++            cooldownText.text = ability.IsOnCooldown
++                ? ability.CooldownRemaining.ToString("0.0")
++                : abilityKey.ToString();
+         }
+     }
+ }
+\ No newline at end of file
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/CoreVisual.cs b/Assets/Scripts/PlayerLogic/magic/core/CoreVisual.cs
+index a197b77..77ceb81 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/CoreVisual.cs
++++ b/Assets/Scripts/PlayerLogic/magic/core/CoreVisual.cs
+@@ -2,13 +2,13 @@ using UnityEngine;
+ 
+ public class CoreVisual : MonoBehaviour
+ {
+-    [Header("Ссылки")]
++    [Header("РЎСЃС‹Р»РєРё")]
+     [SerializeField] private Renderer coreRenderer;
+     [SerializeField] private ParticleSystem regenerationEffect;
+     [SerializeField] private ParticleSystem buffEffect;
+     [SerializeField] private ParticleSystem ultimateEffect;
+ 
+-    [Header("Цвета состояний")]
++    [Header("Р¦РІРµС‚Р° СЃРѕСЃС‚РѕСЏРЅРёР№")]
+     [SerializeField] private Color normalColor = Color.cyan;
+     [SerializeField] private Color overheatedColor = Color.red;
+ 
+@@ -26,7 +26,7 @@ public class CoreVisual : MonoBehaviour
+ 
+     private void Update()
+     {
+-        // Плавный переход цвета
++        // РџР»Р°РІРЅС‹Р№ РїРµСЂРµС…РѕРґ С†РІРµС‚Р°
+         if (coreRenderer != null)
+         {
+             coreRenderer.GetPropertyBlock(propertyBlock);
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/PlayerCore.cs b/Assets/Scripts/PlayerLogic/magic/core/PlayerCore.cs
+index 9afbeed..229ea9e 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/PlayerCore.cs
++++ b/Assets/Scripts/PlayerLogic/magic/core/PlayerCore.cs
+@@ -1,48 +1,51 @@
+ using UnityEngine;
+ using UnityEngine.InputSystem;
++using System;
+ using System.Collections.Generic;
+ 
+ public class PlayerCore : MonoBehaviour
+ {
+-    [Header("Ссылки")]
++    [Header("РЎРІСЏР·Р°РЅРЅС‹Рµ РєРѕРјРїРѕРЅРµРЅС‚С‹")]
+     [SerializeField] private PlayerStateManager stateManager;
+     [SerializeField] private PlayerMovement movement;
+     [SerializeField] private BodyPart[] bodyParts;
+     [SerializeField] private CoreOverheatSystem overheatSystem;
+-    [SerializeField] private CoreVisual coreVisual; // <-- Добавлено!
++    [SerializeField] private CoreVisual coreVisual;
+ 
+-    [Header("Настройки ядра")]
++    [Header("Р­РЅРµСЂРіРёСЏ СЏРґСЂР°")]
+     [SerializeField] private int maxCoreEnergy = 100;
+     [SerializeField] private float energyRegenRate = 5f;
+-    [SerializeField] private float overheatedDuration = 5f;
+ 
+-    [Header("Починка")]
++    [Header("Р РµРјРѕРЅС‚")]
+     [SerializeField] private int repairEnergyCost = 30;
+     [SerializeField] private float repairCooldown = 2f;
+ 
+-    [Header("Способности")]
++    [Header("РЎРїРѕСЃРѕР±РЅРѕСЃС‚Рё")]
+     [SerializeField] private List<CoreAbilityBase> abilities = new List<CoreAbilityBase>();
+     [SerializeField] private KeyCode[] abilityKeys;
+ 
+     private int currentEnergy;
+-    private CoreOverheatSystem.CoreState coreState = CoreOverheatSystem.CoreState.Active;
+-    private float overheatedTimer;
+     private float repairCooldownTimer;
+     private bool isInvincible;
+     private float invincibilityTimer;
+ 
+-    // Публичные свойства
++    // РЎРѕР±С‹С‚РёСЏ РґР»СЏ UI Рё РґСЂСѓРіРёС… СЃРёСЃС‚РµРј (РІРјРµСЃС‚Рѕ polling)
++    public event Action<int, int> OnEnergyChanged; // (current, max)
++    public event Action OnBecameOverheated;
++    public event Action OnCooledDown;
++    public event Action OnRepairPerformed;
++
+     public int CurrentEnergy => currentEnergy;
+     public int MaxEnergy => maxCoreEnergy;
+-    public float EnergyPercent => (float)currentEnergy / maxCoreEnergy;
++    public float EnergyPercent => maxCoreEnergy > 0 ? (float)currentEnergy / maxCoreEnergy : 0f;
+     public bool IsOverheated => overheatSystem != null && overheatSystem.IsOverheated;
+     public bool IsInvincible => isInvincible;
+-    public CoreVisual CoreVisual => coreVisual; // <-- Добавлено!
++    public CoreVisual CoreVisual => coreVisual;
+ 
+-    public bool CanUseAbility => coreState == CoreOverheatSystem.CoreState.Active && currentEnergy > 0 && !isInvincible;
+-    public bool CanRepair => coreState == CoreOverheatSystem.CoreState.Active &&
++    public bool CanUseAbility => !IsOverheated && currentEnergy > 0 && !isInvincible;
++    public bool CanRepair => !IsOverheated &&
+                              currentEnergy >= repairEnergyCost &&
+-                             repairCooldownTimer <= 0;
++                             repairCooldownTimer <= 0f;
+ 
+     private Keyboard keyboard;
+ 
+@@ -52,15 +55,29 @@ public class PlayerCore : MonoBehaviour
+         keyboard = Keyboard.current;
+ 
+         if (overheatSystem == null)
+-        {
+             overheatSystem = GetComponent<CoreOverheatSystem>();
+-        }
+         if (coreVisual == null)
+-        {
+             coreVisual = GetComponent<CoreVisual>();
++
++        if (overheatSystem != null)
++        {
++            overheatSystem.OnOverheated += HandleBecameOverheated;
++            overheatSystem.OnCooled += HandleCooledDown;
+         }
+     }
+ 
++    private void OnDestroy()
++    {
++        if (overheatSystem != null)
++        {
++            overheatSystem.OnOverheated -= HandleBecameOverheated;
++            overheatSystem.OnCooled -= HandleCooledDown;
++        }
++    }
++
++    private void HandleBecameOverheated() => OnBecameOverheated?.Invoke();
++    private void HandleCooledDown() => OnCooledDown?.Invoke();
++
+     private void Update()
+     {
+         HandleTimers();
+@@ -71,52 +88,30 @@ public class PlayerCore : MonoBehaviour
+ 
+     private void HandleInput()
+     {
+-        if (keyboard == null)
+-        {
+-            Debug.LogWarning("[PlayerCore] Keyboard не инициализирован!");
+-            return;
+-        }
++        if (keyboard == null) return;
+ 
+-        // Починка
+-        if (keyboard[Key.Q].wasPressedThisFrame)
++        // Р РµРјРѕРЅС‚ РЅР° Q
++        if (keyboard[Key.Q].wasPressedThisFrame && CanRepair)
+         {
+-            Debug.Log("[INPUT] Нажата Q");
+-            if (CanRepair)
+-            {
+-                RepairAllParts();
+-            }
+-            else
+-            {
+-                Debug.Log($"[PlayerCore] Нельзя починить. Energy: {currentEnergy}, Cooldown: {repairCooldownTimer}");
+-            }
++            RepairAllParts();
+         }
+ 
+-        // Способности 1-7
++        // РЎРїРѕСЃРѕР±РЅРѕСЃС‚Рё РЅР° РЅР°Р·РЅР°С‡РµРЅРЅС‹С… РєР»Р°РІРёС€Р°С…
+         for (int i = 0; i < abilities.Count && i < abilityKeys.Length; i++)
+         {
+-            KeyCode expectedKey = abilityKeys[i];
+-            Key unityKey = (Key)expectedKey;
++            Key unityKey = (Key)abilityKeys[i];
+ 
+             if (keyboard[unityKey].wasPressedThisFrame)
+             {
+-                Debug.Log($"[INPUT] Нажата клавиша {i + 1} ({expectedKey})");
+-                Debug.Log($"[PlayerCore] Способностей: {abilities.Count}, CanUse: {CanUseAbility}");
+-
+-                if (i < abilities.Count)
+-                {
+-                    CoreAbilityBase ability = abilities[i];
+-                    Debug.Log($"[PlayerCore] Попытка активировать: {ability.abilityName}");
+-                    Debug.Log($"[PlayerCore] Energy: {currentEnergy}/{maxCoreEnergy}, Cost: {ability.energyCost}");
+-
+-                    bool result = UseAbility(i);
+-                    Debug.Log($"[PlayerCore] Результат: {result}");
+-                }
++                UseAbility(i);
+             }
+         }
+     }
+ 
+     public void RepairAllParts()
+     {
++        if (!CanRepair) return;
++
+         int brokenCount = 0;
+ 
+         foreach (var part in bodyParts)
+@@ -130,15 +125,14 @@ public class PlayerCore : MonoBehaviour
+ 
+         if (brokenCount > 0)
+         {
+-            currentEnergy -= repairEnergyCost;
++            SpendEnergy(repairEnergyCost);
+             repairCooldownTimer = repairCooldown;
+ 
+             if (stateManager != null)
+-            {
+                 stateManager.Heal(10);
+-            }
+ 
+-            Debug.Log($"[ЯДРО] Починено частей: {brokenCount}");
++            Debug.Log($"[PlayerCore] РџРѕС‡РёРЅРµРЅРѕ С‡Р°СЃС‚РµР№: {brokenCount}");
++            OnRepairPerformed?.Invoke();
+         }
+     }
+ 
+@@ -148,29 +142,34 @@ public class PlayerCore : MonoBehaviour
+ 
+         CoreAbilityBase ability = abilities[index];
+ 
+-        if (!ability.CanActivate(this))
+-        {
+-            Debug.Log($"[ЯДРО] Нельзя активировать {ability.abilityName}!");
+-            return false;
+-        }
++        if (!CanUseAbility || !ability.CanActivate(this)) return false;
+ 
+         ability.Activate(this, stateManager, movement);
+-        currentEnergy -= ability.energyCost;
++        SpendEnergy(ability.energyCost);
+ 
+         if (overheatSystem != null)
+-        {
+             overheatSystem.AddHeat(ability.heatGenerated);
+-        }
+ 
+-        // Меняем цвет ядра
+         if (coreVisual != null)
+-        {
+             coreVisual.SetCoreColor(ability.GetCoreColor());
+-        }
+ 
+         return true;
+     }
+ 
++    /// <summary>РЎРїРёСЃР°РЅРёРµ СЌРЅРµСЂРіРёРё СЃ СЃРѕР±С‹С‚РёРµРј (РёСЃРїРѕР»СЊР·СѓСЋС‚ СЃРїРѕСЃРѕР±РЅРѕСЃС‚Рё РёР·РІРЅРµ).</summary>
++    public void SpendEnergy(int amount)
++    {
++        currentEnergy = Mathf.Clamp(currentEnergy - amount, 0, maxCoreEnergy);
++        OnEnergyChanged?.Invoke(currentEnergy, maxCoreEnergy);
++    }
++
++    /// <summary>Р’РѕР·РІСЂР°С‚ СЌРЅРµСЂРіРёРё (РЅР°РїСЂРёРјРµСЂ, РїСЂРё РѕС‚РјРµРЅРµ СЃРїРѕСЃРѕР±РЅРѕСЃС‚Рё).</summary>
++    public void RefundEnergy(int amount)
++    {
++        currentEnergy = Mathf.Clamp(currentEnergy + amount, 0, maxCoreEnergy);
++        OnEnergyChanged?.Invoke(currentEnergy, maxCoreEnergy);
++    }
++
+     public CoreAbilityBase GetAbility(int index)
+     {
+         if (index >= 0 && index < abilities.Count)
+@@ -182,6 +181,18 @@ public class PlayerCore : MonoBehaviour
+     {
+         isInvincible = true;
+         invincibilityTimer = duration;
++
++        if (stateManager != null)
++        {
++            // Р РµР°Р»СЊРЅР°СЏ РЅРµСѓСЏР·РІРёРјРѕСЃС‚СЊ: РІС…РѕРґСЏС‰РёР№ СѓСЂРѕРЅ x0 РЅР° РІСЂРµРјСЏ РґРµР№СЃС‚РІРёСЏ
++            stateManager.AddEffect(new StatusEffect
++            {
++                effectName = "Invincibility",
++                duration = duration,
++                speedMultiplier = 1f,
++                damageMultiplier = 0f
++            });
++        }
+     }
+ 
+     private void HandleInvincibility()
+@@ -189,46 +200,31 @@ public class PlayerCore : MonoBehaviour
+         if (isInvincible)
+         {
+             invincibilityTimer -= Time.deltaTime;
+-            if (invincibilityTimer <= 0)
+-            {
++            if (invincibilityTimer <= 0f)
+                 isInvincible = false;
+-            }
+         }
+     }
+ 
+-    public void OverheatCore()
+-    {
+-        coreState = CoreOverheatSystem.CoreState.Overheated;
+-        overheatedTimer = overheatedDuration;
+-    }
+-
+     private void RegenerateEnergy()
+     {
+         if (currentEnergy < maxCoreEnergy)
+         {
+-            int oldEnergy = currentEnergy;
+-            currentEnergy = Mathf.Min(maxCoreEnergy, currentEnergy + (int)(energyRegenRate * Time.deltaTime));
+-
+-            // Только для отладки - раскомментируйте если нужно
+-             if (oldEnergy != currentEnergy && Time.frameCount % 60 == 0)
+-                 Debug.Log($"[REGEN] Energy: {oldEnergy} -> {currentEnergy}");
++            // Р”СЂРѕР±РѕРµ РЅР°РєРѕРїР»РµРЅРёРµ, С‡С‚РѕР±С‹ СЂРµРіРµРЅРµСЂР°С†РёСЏ РЅРµ "РїСЂРѕРіР»Р°С‚С‹РІР°Р»Р°СЃСЊ" РѕРєСЂСѓРіР»РµРЅРёРµРј
++            regenAccumulator += energyRegenRate * Time.deltaTime;
++            int whole = Mathf.FloorToInt(regenAccumulator);
++            if (whole > 0)
++            {
++                regenAccumulator -= whole;
++                SpendEnergy(-whole); // Refund via clamped helper
++            }
+         }
+     }
+ 
++    private float regenAccumulator;
++
+     private void HandleTimers()
+     {
+-        if (coreState == CoreOverheatSystem.CoreState.Overheated)
+-        {
+-            overheatedTimer -= Time.deltaTime;
+-            if (overheatedTimer <= 0)
+-            {
+-                coreState = CoreOverheatSystem.CoreState.Active;
+-            }
+-        }
+-
+-        if (repairCooldownTimer > 0)
+-        {
++        if (repairCooldownTimer > 0f)
+             repairCooldownTimer -= Time.deltaTime;
+-        }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/Assets/test/TestLimbSwap.cs b/Assets/test/TestLimbSwap.cs
+index 5df8ca8..7099221 100644
+--- a/Assets/test/TestLimbSwap.cs
++++ b/Assets/test/TestLimbSwap.cs
+@@ -19,14 +19,14 @@ public class TestLimbSwap : MonoBehaviour
+     {
+         if (limbSwapSystem == null)
+         {
+-            Debug.LogError("[TestLimbSwap] LimbSwapSystem не назначен!");
++            Debug.LogError("[TestLimbSwap] LimbSwapSystem РЅРµ РЅР°Р·РЅР°С‡РµРЅ!");
+         }
+         else
+         {
+-            Debug.Log("[TestLimbSwap] Система найдена");
+-            Debug.Log($"[TestLimbSwap] Доступно голов: {limbSwapSystem.GetAvailableLimbs("Head").Count}");
+-            Debug.Log($"[TestLimbSwap] Доступно левых рук: {limbSwapSystem.GetAvailableLimbs("ArmL").Count}");
+-            Debug.Log($"[TestLimbSwap] Доступно правых рук: {limbSwapSystem.GetAvailableLimbs("ArmR").Count}");
++            Debug.Log("[TestLimbSwap] РЎРёСЃС‚РµРјР° РЅР°Р№РґРµРЅР°");
++            Debug.Log($"[TestLimbSwap] Р”РѕСЃС‚СѓРїРЅРѕ РіРѕР»РѕРІ: {limbSwapSystem.GetAvailableLimbs("Head").Count}");
++            Debug.Log($"[TestLimbSwap] Р”РѕСЃС‚СѓРїРЅРѕ Р»РµРІС‹С… СЂСѓРє: {limbSwapSystem.GetAvailableLimbs("ArmL").Count}");
++            Debug.Log($"[TestLimbSwap] Р”РѕСЃС‚СѓРїРЅРѕ РїСЂР°РІС‹С… СЂСѓРє: {limbSwapSystem.GetAvailableLimbs("ArmR").Count}");
+         }
+     }
+ 
+@@ -34,58 +34,58 @@ public class TestLimbSwap : MonoBehaviour
+     {
+         if (limbSwapSystem == null || keyboard == null) return;
+ 
+-        // Клавиша 1 - заменить голову
++        // РљР»Р°РІРёС€Р° 1 - Р·Р°РјРµРЅРёС‚СЊ РіРѕР»РѕРІСѓ
+         if (keyboard[Key.Digit1].wasPressedThisFrame)
+         {
+             var heads = limbSwapSystem.GetAvailableLimbs("Head");
+             if (heads.Count > 0)
+             {
+                 currentHeadIndex = (currentHeadIndex + 1) % heads.Count;
+-                Debug.Log($"[TestLimbSwap] Меняем голову на индекс {currentHeadIndex}: {heads[currentHeadIndex].name}");
++                Debug.Log($"[TestLimbSwap] РњРµРЅСЏРµРј РіРѕР»РѕРІСѓ РЅР° РёРЅРґРµРєСЃ {currentHeadIndex}: {heads[currentHeadIndex].name}");
+                 limbSwapSystem.SwapLimb("Head", heads[currentHeadIndex]);
+             }
+             else
+             {
+-                Debug.LogWarning("[TestLimbSwap] Нет доступных голов!");
++                Debug.LogWarning("[TestLimbSwap] РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… РіРѕР»РѕРІ!");
+             }
+         }
+ 
+-        // Клавиша 2 - заменить левую руку
++        // РљР»Р°РІРёС€Р° 2 - Р·Р°РјРµРЅРёС‚СЊ Р»РµРІСѓСЋ СЂСѓРєСѓ
+         if (keyboard[Key.Digit2].wasPressedThisFrame)
+         {
+             var arms = limbSwapSystem.GetAvailableLimbs("ArmL");
+             if (arms.Count > 0)
+             {
+                 currentArmLIndex = (currentArmLIndex + 1) % arms.Count;
+-                Debug.Log($"[TestLimbSwap] Меняем левую руку на индекс {currentArmLIndex}: {arms[currentArmLIndex].name}");
++                Debug.Log($"[TestLimbSwap] РњРµРЅСЏРµРј Р»РµРІСѓСЋ СЂСѓРєСѓ РЅР° РёРЅРґРµРєСЃ {currentArmLIndex}: {arms[currentArmLIndex].name}");
+                 limbSwapSystem.SwapLimb("ArmL", arms[currentArmLIndex]);
+             }
+             else
+             {
+-                Debug.LogWarning("[TestLimbSwap] Нет доступных левых рук!");
++                Debug.LogWarning("[TestLimbSwap] РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… Р»РµРІС‹С… СЂСѓРє!");
+             }
+         }
+ 
+-        // Клавиша 3 - заменить правую руку
++        // РљР»Р°РІРёС€Р° 3 - Р·Р°РјРµРЅРёС‚СЊ РїСЂР°РІСѓСЋ СЂСѓРєСѓ
+         if (keyboard[Key.Digit3].wasPressedThisFrame)
+         {
+             var arms = limbSwapSystem.GetAvailableLimbs("ArmR");
+             if (arms.Count > 0)
+             {
+                 currentArmRIndex = (currentArmRIndex + 1) % arms.Count;
+-                Debug.Log($"[TestLimbSwap] Меняем правую руку на индекс {currentArmRIndex}: {arms[currentArmRIndex].name}");
++                Debug.Log($"[TestLimbSwap] РњРµРЅСЏРµРј РїСЂР°РІСѓСЋ СЂСѓРєСѓ РЅР° РёРЅРґРµРєСЃ {currentArmRIndex}: {arms[currentArmRIndex].name}");
+                 limbSwapSystem.SwapLimb("ArmR", arms[currentArmRIndex]);
+             }
+             else
+             {
+-                Debug.LogWarning("[TestLimbSwap] Нет доступных правых рук!");
++                Debug.LogWarning("[TestLimbSwap] РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… РїСЂР°РІС‹С… СЂСѓРє!");
+             }
+         }
+ 
+-        // Клавиша R - сброс
++        // РљР»Р°РІРёС€Р° R - СЃР±СЂРѕСЃ
+         if (keyboard[Key.R].wasPressedThisFrame)
+         {
+-            Debug.Log("[TestLimbSwap] Сброс всех частей");
++            Debug.Log("[TestLimbSwap] РЎР±СЂРѕСЃ РІСЃРµС… С‡Р°СЃС‚РµР№");
+         }
+     }
+ }
+\ No newline at end of file
+-- 
+2.39.5
+

@@ -1,0 +1,19 @@
+diff --git a/Assets/1.unity b/Assets/1.unity
+index af63fa2..4c10236 100644
+--- a/Assets/1.unity
++++ b/Assets/1.unity
+@@ -480,10 +480,12 @@ MonoBehaviour:
+   m_Name: 
+   m_EditorClassIdentifier: Assembly-CSharp::CoreOverheatSystem
+   maxHeat: 100
+-  coolingRate: 5
++  coolingRate: 15
+   overheatThreshold: 80
+-  advancedCoolingRate: 15
++  advancedCoolingRate: 30
+   hasAdvancedCooling: 1
++  logStateChanges: 1
++  stateLogInterval: 1
+ --- !u!114 &381730431
+ MonoBehaviour:
+   m_ObjectHideFlags: 0
