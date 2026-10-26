@@ -3,7 +3,7 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "LaserShotAbility", menuName = "Core Abilities/Combat/Laser Shot")]
 public class LaserShotAbility : CoreAbilityBase
 {
-    [Header("Лазер")]
+    [Header("Р›Р°Р·РµСЂ")]
     [SerializeField] private float laserDamage = 30f;
     [SerializeField] private float laserRange = 50f;
     [SerializeField] private LayerMask enemyMask;
@@ -12,35 +12,35 @@ public class LaserShotAbility : CoreAbilityBase
 
     public LaserShotAbility()
     {
-        abilityName = "Лазерный выстрел";
+        abilityName = "Р›Р°Р·РµСЂРЅС‹Р№ РІС‹СЃС‚СЂРµР»";
         abilityType = AbilityType.Combat;
         energyCost = 25;
-        heatGenerated = 15f; // Средний нагрев
+        heatGenerated = 15f; // РЎСЂРµРґРЅРёР№ РЅР°РіСЂРµРІ
     }
 
     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
     {
-        // Проверяем, есть ли правая рука (для лазера)
+        // РџСЂРѕРІРµСЂСЏРµРј, РµСЃС‚СЊ Р»Рё РїСЂР°РІР°СЏ СЂСѓРєР° (РґР»СЏ Р»Р°Р·РµСЂР°)
         if (stateManager.RightArm == null || !stateManager.RightArm.IsActive)
         {
-            Debug.Log("[ЛАЗЕР] Правая рука отсутствует!");
+            Debug.Log("[Р›РђР—Р•Р ] РџСЂР°РІР°СЏ СЂСѓРєР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚!");
             return;
         }
 
-        // Находим цель
+        // РќР°С…РѕРґРёРј С†РµР»СЊ
         Ray ray = new Ray(laserSpawnPoint != null ? laserSpawnPoint.position : core.transform.position,
                          core.transform.forward);
 
         if (Physics.Raycast(ray, out RaycastHit hit, laserRange, enemyMask))
         {
-            // Наносим урон
+            // РќР°РЅРѕСЃРёРј СѓСЂРѕРЅ
             if (hit.collider.TryGetComponent<IDamageable>(out IDamageable damageable))
             {
                 damageable.TakeDamage(Mathf.RoundToInt(laserDamage), hit.point - ray.origin);
-                Debug.Log($"[ЛАЗЕР] Урон {laserDamage} по {hit.collider.name}");
+                Debug.Log($"[Р›РђР—Р•Р ] РЈСЂРѕРЅ {laserDamage} РїРѕ {hit.collider.name}");
             }
 
-            // Визуальный эффект лазера
+            // Р’РёР·СѓР°Р»СЊРЅС‹Р№ СЌС„С„РµРєС‚ Р»Р°Р·РµСЂР°
             if (laserPrefab != null)
             {
                 GameObject laser = Instantiate(laserPrefab, laserSpawnPoint.position, Quaternion.identity);

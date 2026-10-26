@@ -3,28 +3,28 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "CloneAbility", menuName = "Core Abilities/Ultimate/Clone")]
 public class CloneAbility : CoreAbilityBase
 {
-    [Header("Клон")]
+    [Header("РљР»РѕРЅ")]
     [SerializeField] private GameObject clonePrefab;
     [SerializeField] private float cloneDuration = 30f;
-    [SerializeField] private float cloneDamageMultiplier = 0.5f; // Урон клона / 2
+    [SerializeField] private float cloneDamageMultiplier = 0.5f; // РЈСЂРѕРЅ РєР»РѕРЅР° / 2
 
     public CloneAbility()
     {
-        abilityName = "Клонирование";
+        abilityName = "РљР»РѕРЅРёСЂРѕРІР°РЅРёРµ";
         abilityType = AbilityType.Ultimate;
         energyCost = 80;
-        heatGenerated = 80f; // Очень высокий нагрев
+        heatGenerated = 80f; // РћС‡РµРЅСЊ РІС‹СЃРѕРєРёР№ РЅР°РіСЂРµРІ
     }
 
     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
     {
         if (clonePrefab == null)
         {
-            Debug.LogError("[КЛОН] Префаб клона не назначен!");
+            Debug.LogError("[РљР›РћРќ] РџСЂРµС„Р°Р± РєР»РѕРЅР° РЅРµ РЅР°Р·РЅР°С‡РµРЅ!");
             return;
         }
 
-        // Создаем клона
+        // РЎРѕР·РґР°РµРј РєР»РѕРЅР°
         GameObject clone = Instantiate(clonePrefab, core.transform.position + Vector3.right * 2, core.transform.rotation);
 
         CloneController cloneController = clone.GetComponent<CloneController>();
@@ -33,9 +33,9 @@ public class CloneAbility : CoreAbilityBase
             cloneController.Setup(core, stateManager, cloneDuration, cloneDamageMultiplier);
         }
 
-        // Уничтожаем клона через duration
+        // РЈРЅРёС‡С‚РѕР¶Р°РµРј РєР»РѕРЅР° С‡РµСЂРµР· duration
         Destroy(clone, cloneDuration);
 
-        Debug.Log($"[УЛЬТИМЕЙТ] Клон создан на {cloneDuration} сек!");
+        Debug.Log($"[РЈР›Р¬РўРРњР•Р™Рў] РљР»РѕРЅ СЃРѕР·РґР°РЅ РЅР° {cloneDuration} СЃРµРє!");
     }
 }

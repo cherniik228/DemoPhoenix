@@ -5,12 +5,12 @@ public class EnemyBodyPart : MonoBehaviour, IDamageable
 {
     public enum PartType { Head, LeftArm, RightArm, LeftLeg, RightLeg, Torso }
 
-    [Header("Íàñòğîéêè")]
+    [Header("ĞĞ°ÑÑ‚Ñ€Ğ¾Ğ¹ĞºĞ¸")]
     [SerializeField] private PartType partType = PartType.Torso;
     [SerializeField] private int maxHealth = 50;
     [SerializeField] private float severThreshold = 0f;
 
-    [Header("Âèçóàëüíûå ıôôåêòû")]
+    [Header("Ğ’Ğ¸Ğ·ÑƒĞ°Ğ»ÑŒĞ½Ñ‹Ğµ ÑÑ„Ñ„ĞµĞºÑ‚Ñ‹")]
     [SerializeField] private GameObject breakEffectPrefab;
     [SerializeField] private Color brokenColor = Color.yellow;
 
@@ -48,7 +48,7 @@ public class EnemyBodyPart : MonoBehaviour, IDamageable
         if (isSevered) return;
 
         currentHealth -= amount;
-        Debug.Log($"[Âğàã-{partType}] Óğîí: {amount}. HP: {currentHealth}/{maxHealth}");
+        Debug.Log($"[Ğ’Ñ€Ğ°Ğ³-{partType}] Ğ£Ñ€Ğ¾Ğ½: {amount}. HP: {currentHealth}/{maxHealth}");
 
         UpdateVisuals();
 
@@ -65,7 +65,7 @@ public class EnemyBodyPart : MonoBehaviour, IDamageable
     private void BreakPart(Vector3 hitDirection)
     {
         isBroken = true;
-        Debug.Log($"[Âğàã-{partType}] ÑËÎÌÀÍÀ!");
+        Debug.Log($"[Ğ’Ñ€Ğ°Ğ³-{partType}] Ğ¡Ğ›ĞĞœĞĞĞ!");
 
         if (breakEffectPrefab != null)
         {
@@ -84,7 +84,7 @@ public class EnemyBodyPart : MonoBehaviour, IDamageable
     private void SeverPart(Vector3 hitDirection)
     {
         isSevered = true;
-        Debug.Log($"[Âğàã-{partType}] ÎÒÎĞÂÀÍÀ!");
+        Debug.Log($"[Ğ’Ñ€Ğ°Ğ³-{partType}] ĞĞ¢ĞĞ Ğ’ĞĞĞ!");
 
         if (breakEffectPrefab != null)
         {

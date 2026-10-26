@@ -5,72 +5,122 @@ public class CoreOverheatSystem : MonoBehaviour
 {
     public enum CoreState { Active, Overheated, Charging }
 
-    [Header("Настройки нагрева")]
+    [Header("РќР°СЃС‚СЂРѕР№РєРё РЅР°РіСЂРµРІР°")]
     [SerializeField] private float maxHeat = 100f;
-    [SerializeField] private float coolingRate = 10f; // Увеличил скорость
+    [SerializeField] private float coolingRate = 15f; // Г—1.5 Рє СЃРєРѕСЂРѕСЃС‚Рё РѕСЃС‚С‹РІР°РЅРёСЏ (Р±С‹Р»Рѕ 10)
     [SerializeField] private float overheatThreshold = 80f;
 
-    [Header("Продвинутое охлаждение")]
-    [SerializeField] private float advancedCoolingRate = 20f;
+    [Header("РџСЂРѕРґРІРёРЅСѓС‚РѕРµ РѕС…Р»Р°Р¶РґРµРЅРёРµ")]
+    [SerializeField] private float advancedCoolingRate = 30f; // Г—1.5 (Р±С‹Р»Рѕ 20)
     [SerializeField] private bool hasAdvancedCooling = false;
+
+    [Header("Р›РѕРіРёСЂРѕРІР°РЅРёРµ СЃРѕСЃС‚РѕСЏРЅРёСЏ СЏРґСЂР°")]
+    [SerializeField] private bool logStateChanges = true;
+
+    [Header("РџРµСЂРёРѕРґРёС‡РµСЃРєРёР№ Р»РѕРі РІ РєРѕРЅСЃРѕР»СЊ")]
+    [Tooltip("РљР°Рє С‡Р°СЃС‚Рѕ РїРµС‡Р°С‚Р°С‚СЊ С‚РµРєСѓС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ СЏРґСЂР° РІ Console (СЃРµРє). 0 вЂ” РІС‹РєР»СЋС‡РёС‚СЊ РїРµСЂРёРѕРґРёС‡РµСЃРєРёР№ Р»РѕРі.")]
+    [SerializeField] private float stateLogInterval = 1f;
 
     private float currentHeat;
     private bool isOverheated;
     private CoreState coreState = CoreState.Active;
+    private float periodicLogTimer;
 
     public float CurrentHeat => currentHeat;
     public float HeatPercent => maxHeat > 0 ? currentHeat / maxHeat : 0;
     public bool IsOverheated => isOverheated;
     public float MaxHeat => maxHeat;
+    public float CoolingRate => coolingRate;
     public CoreState State => coreState;
 
     public event Action<float> OnHeatChanged;
     public event Action OnOverheated;
     public event Action OnCooled;
+    public event Action<CoreState> OnStateChanged;
+
+    private void Awake()
+    {
+        LogState($"РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ: {coreState}, С‚РµРїР»Рѕ {currentHeat}/{maxHeat}, РѕСЃС‚С‹РІР°РЅРёРµ {coolingRate}/СЃРµРє");
+    }
 
     private void Update()
     {
         HandleCooling();
+        HandlePeriodicLog();
+    }
+
+    private void HandlePeriodicLog()
+    {
+        if (!logStateChanges || stateLogInterval <= 0f) return;
+
+        periodicLogTimer += Time.deltaTime;
+        if (periodicLogTimer >= stateLogInterval)
+        {
+            periodicLogTimer = 0f;
+            float rate = isOverheated
+                ? (hasAdvancedCooling ? advancedCoolingRate : coolingRate * 2f)
+                : coolingRate;
+            LogState($"[РїРµСЂРёРѕРґРёС‡РµСЃРєРёР№] С‚РµРїР»Рѕ {currentHeat:F1}/{maxHeat}, РѕСЃС‚С‹РІР°РЅРёРµ {rate}/СЃРµРє, ~{Mathf.CeilToInt(currentHeat / Mathf.Max(0.01f, rate))} СЃРµРє РґРѕ РЅСѓР»СЏ");
+        }
+    }
+
+    private void SetState(CoreState newState, string reason)
+    {
+        if (coreState == newState) return;
+        coreState = newState;
+        LogState($"{newState} ({reason}). РўРµРїР»Рѕ: {currentHeat:F1}/{maxHeat}");
+        OnStateChanged?.Invoke(newState);
+    }
+
+    private void LogState(string message)
+    {
+        if (logStateChanges)
+            Debug.Log($"[РЇР”Р Рћ][{coreState}] {message}");
     }
 
     private void HandleCooling()
     {
         if (currentHeat > 0)
         {
-            // Определяем скорость охлаждения
+            // РћРїСЂРµРґРµР»СЏРµРј СЃРєРѕСЂРѕСЃС‚СЊ РѕС…Р»Р°Р¶РґРµРЅРёСЏ
             float rate = coolingRate;
 
-            // Если перегрет — используем продвинутое охлаждение
+            // Р•СЃР»Рё РїРµСЂРµРіСЂРµС‚ вЂ” РёСЃРїРѕР»СЊР·СѓРµРј РїСЂРѕРґРІРёРЅСѓС‚РѕРµ РѕС…Р»Р°Р¶РґРµРЅРёРµ
             if (isOverheated)
             {
                 rate = hasAdvancedCooling ? advancedCoolingRate : coolingRate * 2f;
             }
 
-            // Охлаждаем
+            // РћС…Р»Р°Р¶РґР°РµРј
             currentHeat -= rate * Time.deltaTime;
 
-            // Проверяем минимальное значение
+            // Р•СЃР»Рё Р±С‹Р»Рѕ РїРµСЂРµРіСЂРµС‚Рѕ, РЅРѕ С‚РµРїР»Рѕ СѓРїР°Р»Рѕ РЅРёР¶Рµ РїРѕСЂРѕРіР° вЂ” СЃРЅРёРјР°РµРј РїРµСЂРµРіСЂРµРІ
+            if (isOverheated && currentHeat <= overheatThreshold)
+            {
+                currentHeat = Mathf.Max(0, currentHeat);
+                isOverheated = false;
+                SetState(CoreState.Active, "С‚РµРјРїРµСЂР°С‚СѓСЂР° СѓРїР°Р»Р° РЅРёР¶Рµ РїРѕСЂРѕРіР°");
+                OnCooled?.Invoke();
+                OnHeatChanged?.Invoke(currentHeat);
+                return;
+            }
+
+            // РџСЂРѕРІРµСЂСЏРµРј РјРёРЅРёРјР°Р»СЊРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ
             if (currentHeat <= 0)
             {
                 currentHeat = 0;
 
-                // Если было перегрето — снимаем статус
+                // Р•СЃР»Рё Р±С‹Р»Рѕ РїРµСЂРµРіСЂРµС‚Рѕ вЂ” СЃРЅРёРјР°РµРј СЃС‚Р°С‚СѓСЃ
                 if (isOverheated)
                 {
                     isOverheated = false;
-                    coreState = CoreState.Active;
-                    Debug.Log("[ЯДРО] Остыло! Ядро активно.");
+                    SetState(CoreState.Active, "СЏРґСЂРѕ РїРѕР»РЅРѕСЃС‚СЊСЋ РѕСЃС‚С‹Р»Рѕ");
                     OnCooled?.Invoke();
                 }
-            }
-
-            // Если было перегрето, но тепло упало ниже порога
-            if (isOverheated && currentHeat < overheatThreshold * 0.5f)
-            {
-                isOverheated = false;
-                coreState = CoreState.Active;
-                Debug.Log("[ЯДРО] Температура нормализовалась!");
-                OnCooled?.Invoke();
+                else
+                {
+                    LogState($"РџРѕР»РЅРѕСЃС‚СЊСЋ РѕСЃС‚С‹Р»Рѕ. РўРµРїР»Рѕ: 0/{maxHeat}");
+                }
             }
 
             OnHeatChanged?.Invoke(currentHeat);
@@ -82,13 +132,12 @@ public class CoreOverheatSystem : MonoBehaviour
         currentHeat += amount;
         currentHeat = Mathf.Min(maxHeat, currentHeat);
 
-        Debug.Log($"[ЯДРО] Нагрев +{amount}. Текущее тепло: {currentHeat}/{maxHeat}");
+        LogState($"РќР°РіСЂРµРІ +{amount:F1}. РўРµРїР»Рѕ: {currentHeat:F1}/{maxHeat}");
 
         if (currentHeat >= overheatThreshold && !isOverheated)
         {
             isOverheated = true;
-            coreState = CoreState.Overheated;
-            Debug.LogWarning($"[ЯДРО] ПЕРЕГРЕВ! Тепло: {currentHeat}");
+            SetState(CoreState.Overheated, $"РїСЂРµРІС‹С€РµРЅ РїРѕСЂРѕРі {overheatThreshold}");
             OnOverheated?.Invoke();
         }
     }
@@ -97,15 +146,14 @@ public class CoreOverheatSystem : MonoBehaviour
     {
         currentHeat -= amount;
         currentHeat = Mathf.Max(0, currentHeat);
-        Debug.Log($"[ЯДРО] Принудительное охлаждение -{amount}. Тепло: {currentHeat}");
+        LogState($"РџСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕРµ РѕС…Р»Р°Р¶РґРµРЅРёРµ -{amount:F1}. РўРµРїР»Рѕ: {currentHeat:F1}/{maxHeat}");
     }
 
     public void ResetHeat()
     {
         currentHeat = 0;
         isOverheated = false;
-        coreState = CoreState.Active;
-        Debug.Log("[ЯДРО] Тепло сброшено!");
+        SetState(CoreState.Active, "С‚РµРїР»Рѕ СЃР±СЂРѕС€РµРЅРѕ РІСЂСѓС‡РЅСѓСЋ");
     }
 
     private void OnDrawGizmosSelected()

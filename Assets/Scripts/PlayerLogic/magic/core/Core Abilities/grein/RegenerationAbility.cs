@@ -3,16 +3,16 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "RegenerationAbility", menuName = "Core Abilities/Regeneration")]
 public class RegenerationAbility : CoreAbilityBase
 {
-    [Header("Регенерация")]
-    [SerializeField] private bool prioritizeCritical = true; // Приоритет голове/торсу/ядру
+    [Header("Р РµРіРµРЅРµСЂР°С†РёСЏ")]
+    [SerializeField] private bool prioritizeCritical = true; // РџСЂРёРѕСЂРёС‚РµС‚ РіРѕР»РѕРІРµ/С‚РѕСЂСЃСѓ/СЏРґСЂСѓ
     [SerializeField] private int healAmount = 50;
 
     public RegenerationAbility()
     {
-        abilityName = "Регенерация";
+        abilityName = "Р РµРіРµРЅРµСЂР°С†РёСЏ";
         abilityType = AbilityType.Regeneration;
         energyCost = 30;
-        heatGenerated = 5f; // Малый нагрев
+        heatGenerated = 5f; // РњР°Р»С‹Р№ РЅР°РіСЂРµРІ
     }
 
     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
@@ -21,11 +21,11 @@ public class RegenerationAbility : CoreAbilityBase
 
         if (prioritizeCritical)
         {
-            // Ищем самую важную сломанную часть
+            // РС‰РµРј СЃР°РјСѓСЋ РІР°Р¶РЅСѓСЋ СЃР»РѕРјР°РЅРЅСѓСЋ С‡Р°СЃС‚СЊ
             targetPart = FindCriticalBrokenPart(stateManager);
         }
 
-        // Если нет критических, ищем самую поврежденную
+        // Р•СЃР»Рё РЅРµС‚ РєСЂРёС‚РёС‡РµСЃРєРёС…, РёС‰РµРј СЃР°РјСѓСЋ РїРѕРІСЂРµР¶РґРµРЅРЅСѓСЋ
         if (targetPart == null)
         {
             targetPart = FindMostDamagedPart(stateManager);
@@ -35,30 +35,30 @@ public class RegenerationAbility : CoreAbilityBase
         {
             targetPart.RepairWithCore();
 
-            // Визуальный эффект регенерации
+            // Р’РёР·СѓР°Р»СЊРЅС‹Р№ СЌС„С„РµРєС‚ СЂРµРіРµРЅРµСЂР°С†РёРё
             if (core.CoreVisual != null)
             {
                 core.CoreVisual.PlayRegenerationEffect(targetPart.transform.position);
             }
 
-            Debug.Log($"[РЕГЕНЕРАЦИЯ] Восстановлена: {targetPart.PartName}");
+            Debug.Log($"[Р Р•Р“Р•РќР•Р РђР¦РРЇ] Р’РѕСЃСЃС‚Р°РЅРѕРІР»РµРЅР°: {targetPart.PartName}");
         }
         else
         {
-            Debug.Log("[РЕГЕНЕРАЦИЯ] Все конечности целы!");
+            Debug.Log("[Р Р•Р“Р•РќР•Р РђР¦РРЇ] Р’СЃРµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё С†РµР»С‹!");
         }
     }
 
     private BodyPart FindCriticalBrokenPart(PlayerStateManager stateManager)
     {
-        // Приоритет: Голова > Торс > Ядро > Остальное
+        // РџСЂРёРѕСЂРёС‚РµС‚: Р“РѕР»РѕРІР° > РўРѕСЂСЃ > РЇРґСЂРѕ > РћСЃС‚Р°Р»СЊРЅРѕРµ
         if (stateManager.Head != null && stateManager.Head.IsBroken)
             return stateManager.Head;
 
         if (stateManager.Torso != null && stateManager.Torso.IsBroken)
             return stateManager.Torso;
 
-        // Ядро не может быть сломано (оно либо цело, либо оторвано)
+        // РЇРґСЂРѕ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ СЃР»РѕРјР°РЅРѕ (РѕРЅРѕ Р»РёР±Рѕ С†РµР»Рѕ, Р»РёР±Рѕ РѕС‚РѕСЂРІР°РЅРѕ)
 
         return null;
     }

@@ -4,33 +4,33 @@ using System.Collections;
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMovement : MonoBehaviour
 {
-    [Header("Зависимости")]
+    [Header("Р—Р°РІРёСЃРёРјРѕСЃС‚Рё")]
     [SerializeField] private PlayerInputHandler inputHandler;
     [SerializeField] private PlayerLockOn lockOnSystem;
     [SerializeField] private PlayerStateManager stateManager;
     [SerializeField] private Transform groundCheck;
     [SerializeField] private CameraController cameraController;
 
-    [Header("Визуальная модель")]
+    [Header("Р’РёР·СѓР°Р»СЊРЅР°СЏ РјРѕРґРµР»СЊ")]
     [SerializeField] private Transform modelTransform;
 
-    [Header("Настройки Движения")]
+    [Header("РќР°СЃС‚СЂРѕР№РєРё Р”РІРёР¶РµРЅРёСЏ")]
     [SerializeField] private float walkSpeed = 3f;
     [SerializeField] private float runSpeed = 6f;
     [SerializeField] private float backwardSpeedMult = 0.5f;
 
-    [Header("Настройки Поворота")]
+    [Header("РќР°СЃС‚СЂРѕР№РєРё РџРѕРІРѕСЂРѕС‚Р°")]
     [SerializeField] private float rotationSpeed = 720f;
     [SerializeField] private float rotationStopThreshold = 2f;
 
     [SerializeField] private LayerMask groundMask;
     [SerializeField] private float groundDistance = 0.4f;
 
-    [Header("Прыжок и Гравитация")]
+    [Header("РџСЂС‹Р¶РѕРє Рё Р“СЂР°РІРёС‚Р°С†РёСЏ")]
     [SerializeField] private float jumpHeight = 2f;
     [SerializeField] private float gravity = -15f;
 
-    [Header("Рывок (Dash)")]
+    [Header("Р С‹РІРѕРє (Dash)")]
     [SerializeField] private float dashSpeed = 15f;
     [SerializeField] private float dashDuration = 0.2f;
     [SerializeField] private float dashCooldown = 1f;
@@ -49,7 +49,7 @@ public class PlayerMovement : MonoBehaviour
 
         if (modelTransform == null)
         {
-            Debug.LogError("Model Transform не назначен! Персонаж не будет поворачиваться.");
+            Debug.LogError("Model Transform РЅРµ РЅР°Р·РЅР°С‡РµРЅ! РџРµСЂСЃРѕРЅР°Р¶ РЅРµ Р±СѓРґРµС‚ РїРѕРІРѕСЂР°С‡РёРІР°С‚СЊСЃСЏ.");
         }
     }
 
@@ -166,13 +166,13 @@ public class PlayerMovement : MonoBehaviour
     }
 
     // ==========================================
-    // ИСПРАВЛЕННЫЙ МЕТОД ПОВОРОТА
+    // РРЎРџР РђР’Р›Р•РќРќР«Р™ РњР•РўРћР” РџРћР’РћР РћРўРђ
     // ==========================================
     private void RotateToTarget(Transform target, Quaternion destination)
     {
-        // КОРРЕКЦИЯ: Модель из Blender повёрнута на 90 градусов.
-        // Мы поворачиваем целевой кватернион на -90 градусов по оси Y, 
-        // чтобы локальная ось "вперёд" модели совпала с направлением движения.
+        // РљРћР Р Р•РљР¦РРЇ: РњРѕРґРµР»СЊ РёР· Blender РїРѕРІС‘СЂРЅСѓС‚Р° РЅР° 90 РіСЂР°РґСѓСЃРѕРІ.
+        // РњС‹ РїРѕРІРѕСЂР°С‡РёРІР°РµРј С†РµР»РµРІРѕР№ РєРІР°С‚РµСЂРЅРёРѕРЅ РЅР° -90 РіСЂР°РґСѓСЃРѕРІ РїРѕ РѕСЃРё Y, 
+        // С‡С‚РѕР±С‹ Р»РѕРєР°Р»СЊРЅР°СЏ РѕСЃСЊ "РІРїРµСЂС‘Рґ" РјРѕРґРµР»Рё СЃРѕРІРїР°Р»Р° СЃ РЅР°РїСЂР°РІР»РµРЅРёРµРј РґРІРёР¶РµРЅРёСЏ.
         Quaternion correctedDestination = destination * Quaternion.Euler(0, -90f, 0);
 
         float angleDiff = Quaternion.Angle(target.rotation, correctedDestination);

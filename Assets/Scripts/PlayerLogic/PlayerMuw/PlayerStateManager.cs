@@ -1,31 +1,28 @@
-using System.Collections.Generic;
 using UnityEngine;
 using System;
 
-public class PlayerStateManager : MonoBehaviour, IDamageable
+/// <summary>
+/// Система здоровья и частей тела игрока.
+/// Наследуется от StateManagerBase (общая логика HP с врагами),
+/// добавляет части тела, статусные эффекты и смерть от отрыва головы/торса.
+/// </summary>
+public class PlayerStateManager : StateManagerBase, IDamageable
 {
-    [Header("��������")]
-    [SerializeField] private int maxHealth = 100;
-    private int currentHealth;
-    public bool IsDead { get; private set; }
-
-    [Header("����������")]
+    [Header("Части тела")]
     [SerializeField] private BodyPart[] bodyParts;
 
     public BodyPart[] BodyParts => bodyParts;
 
-    [Header("����������� ������� ������")]
+    [Header("Смерть от отрыва")]
     [SerializeField] private bool dieOnHeadSevered = true;
     [SerializeField] private bool dieOnTorsoSevered = true;
 
-    [Header("���� � ������")]
-    private List<StatusEffect> activeEffects = new List<StatusEffect>();
+    [Header("Статусные эффекты")]
+    [SerializeField] private StatusEffectSystem statusEffects;
 
-    public event Action<int, int> OnHealthChanged;
     public event Action<BodyPart> OnPartDamaged;
     public event Action<BodyPart> OnPartBroken;
     public event Action<BodyPart> OnPartSevered;
-    public event Action OnDeath;
 
     public BodyPart Head => GetPart(BodyPart.PartType.Head);
     public BodyPart Torso => GetPart(BodyPart.PartType.Torso);
@@ -34,21 +31,20 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
     public BodyPart LeftLeg => GetPart(BodyPart.PartType.LeftLeg);
     public BodyPart RightLeg => GetPart(BodyPart.PartType.RightLeg);
 
-    public float HealthPercent => maxHealth > 0 ? (float)currentHealth / maxHealth : 0f;
     public bool HasBothArms => LeftArm?.IsActive == true && RightArm?.IsActive == true;
     public bool HasBothLegs => LeftLeg?.IsActive == true && RightLeg?.IsActive == true;
     public bool HasHead => Head?.IsActive == true;
 
-    private void Awake()
+    protected override void Awake()
     {
-        currentHealth = maxHealth;
-        SubscribeToBodyParts();
-    }
+        base.Awake();
 
-    private void Update()
-    {
-        if (IsDead) return;
-        UpdateEffects();
+        if (statusEffects == null)
+            statusEffects = GetComponent<StatusEffectSystem>();
+        if (statusEffects == null)
+            statusEffects = gameObject.AddComponent<StatusEffectSystem>();
+
+        SubscribeToBodyParts();
     }
 
     private void SubscribeToBodyParts()
@@ -74,23 +70,7 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
         return null;
     }
 
-    public void TakeDamage(int amount, Vector3 hitDirection)
-    {
-        if (IsDead) return;
-
-        int finalDamage = Mathf.RoundToInt(amount * GetDamageMultiplier());
-        currentHealth -= finalDamage;
-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
-
-        Debug.Log($"����� ������� ����: {finalDamage}. HP: {currentHealth}");
-
-        if (currentHealth <= 0)
-        {
-            currentHealth = 0;
-            Die();
-        }
-    }
-
+    /// <summary>Враг бьёт по конкретной части тела; если её нет — урон по общему HP.</summary>
     public void DamageBodyPart(BodyPart.PartType partType, int amount, Vector3 hitDirection)
     {
         BodyPart part = GetPart(partType);
@@ -104,12 +84,16 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
         }
     }
 
-    public void Revive()
+    public override void Revive()
     {
-        IsDead = false;
-        currentHealth = maxHealth;
-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
-        Debug.Log("[StateManager] ����� ���������!");
+        base.Revive();
+
+        // Возвращаем в работу компоненты, отключённые при смерти
+        if (TryGetComponent<PlayerInputHandler>(out var input)) input.enabled = true;
+        if (TryGetComponent<PlayerMovement>(out var move)) move.enabled = true;
+        if (TryGetComponent<PlayerCombat>(out var combat)) combat.enabled = true;
+
+        Debug.Log("[PlayerStateManager] Игрок воскрешён!");
     }
 
     private void HandlePartDamaged(BodyPart part, int currentHP, int maxHP)
@@ -119,29 +103,22 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
 
     private void HandlePartBroken(BodyPart part)
     {
-        Debug.Log($"[StateManager] ���������� �������: {part.PartName}");
+        Debug.Log($"[PlayerStateManager] Часть сломана: {part.PartName}");
         OnPartBroken?.Invoke(part);
     }
 
     private void HandlePartSevered(BodyPart part)
     {
-        Debug.Log($"[StateManager] ���������� ��������: {part.PartName}");
+        Debug.Log($"[PlayerStateManager] Часть оторвана: {part.PartName}");
         OnPartSevered?.Invoke(part);
         CheckCriticalDeath(part);
     }
 
     private void CheckCriticalDeath(BodyPart severedPart)
     {
-        bool shouldDie = false;
-
-        if (severedPart.Type == BodyPart.PartType.Head && dieOnHeadSevered)
-        {
-            shouldDie = true;
-        }
-        else if (severedPart.Type == BodyPart.PartType.Torso && dieOnTorsoSevered)
-        {
-            shouldDie = true;
-        }
+        bool shouldDie =
+            (severedPart.Type == BodyPart.PartType.Head && dieOnHeadSevered) ||
+            (severedPart.Type == BodyPart.PartType.Torso && dieOnTorsoSevered);
 
         if (shouldDie)
         {
@@ -150,65 +127,32 @@ public class PlayerStateManager : MonoBehaviour, IDamageable
         }
     }
 
-    private void Die()
+    protected override void Die()
     {
-        IsDead = true;
-        Debug.Log("����� �����!");
-        OnDeath?.Invoke();
+        base.Die();
+        Debug.Log("[PlayerStateManager] Игрок мёртв!");
 
         if (TryGetComponent<PlayerInputHandler>(out var input)) input.enabled = false;
         if (TryGetComponent<PlayerMovement>(out var move)) move.enabled = false;
         if (TryGetComponent<PlayerCombat>(out var combat)) combat.enabled = false;
     }
 
-    public void Heal(int amount)
-    {
-        if (IsDead) return;
-        currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
-    }
+    // ---------- Статусные эффекты (делегированы в StatusEffectSystem) ----------
 
-    public void AddEffect(StatusEffect newEffect)
-    {
-        StatusEffect effectInstance = new StatusEffect
-        {
-            effectName = newEffect.effectName,
-            duration = newEffect.duration,
-            speedMultiplier = newEffect.speedMultiplier,
-            damageMultiplier = newEffect.damageMultiplier
-        };
-        effectInstance.timer = effectInstance.duration;
-        activeEffects.Add(effectInstance);
-    }
+    public void AddEffect(StatusEffect newEffect) => statusEffects.AddEffect(newEffect);
 
-    private void UpdateEffects()
-    {
-        for (int i = activeEffects.Count - 1; i >= 0; i--)
-        {
-            activeEffects[i].timer -= Time.deltaTime;
-            if (activeEffects[i].timer <= 0)
-            {
-                activeEffects.RemoveAt(i);
-            }
-        }
-    }
+    public bool HasEffect(string effectName) => statusEffects.HasEffect(effectName);
 
-    public float GetSpeedMultiplier()
-    {
-        float mult = 1f;
-        foreach (var eff in activeEffects) mult *= eff.speedMultiplier;
-        return mult;
-    }
+    public void RemoveEffect(string effectName) => statusEffects.RemoveEffect(effectName);
 
-    public float GetDamageMultiplier()
-    {
-        float mult = 1f;
-        foreach (var eff in activeEffects) mult *= eff.damageMultiplier;
-        return mult;
-    }
+    public float GetSpeedMultiplier() => statusEffects.GetSpeedMultiplier();
+
+    /// <summary>Множитель исходящего урона игрока (баффы типа EnhancedRegenBuff).</summary>
+    public float GetDamageMultiplier() => statusEffects.GetDamageMultiplier();
 
     private void OnDestroy()
     {
+        if (bodyParts == null) return;
         foreach (var part in bodyParts)
         {
             if (part != null)

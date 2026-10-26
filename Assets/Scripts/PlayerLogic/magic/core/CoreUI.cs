@@ -4,22 +4,22 @@ using TMPro;
 
 public class CoreUI : MonoBehaviour
 {
-    [Header("Ññûëêè")]
+    [Header("Ð¡ÑÑ‹Ð»ÐºÐ¸")]
     [SerializeField] private PlayerCore playerCore;
     [SerializeField] private CoreOverheatSystem overheatSystem;
 
-    [Header("Ýëåìåíòû UI")]
+    [Header("Ð­Ð»ÐµÐ¼ÐµÐ½Ñ‚Ñ‹ UI")]
     [SerializeField] private Slider energySlider;
     [SerializeField] private Image energyFill;
     [SerializeField] private TextMeshProUGUI energyText;
     [SerializeField] private TextMeshProUGUI stateText;
     [SerializeField] private Image coreIcon;
 
-    [Header("Íàãðåâ ÿäðà")]
+    [Header("ÐÐ°Ð³Ñ€ÐµÐ² ÑÐ´Ñ€Ð°")]
     [SerializeField] private Slider heatSlider;
     [SerializeField] private Image heatFill;
 
-    [Header("Öâåòà ñîñòîÿíèé")]
+    [Header("Ð¦Ð²ÐµÑ‚Ð° ÑÐ¾ÑÑ‚Ð¾ÑÐ½Ð¸Ð¹")]
     [SerializeField] private Color activeColor = Color.cyan;
     [SerializeField] private Color overheatedColor = Color.red;
     [SerializeField] private Color chargingColor = Color.yellow;
@@ -28,7 +28,7 @@ public class CoreUI : MonoBehaviour
     [SerializeField] private Color buffColor = Color.yellow;
     [SerializeField] private Color ultimateColor = new Color(0.5f, 0f, 1f);
 
-    [Header("Ñïîñîáíîñòè")]
+    [Header("Ð¡Ð¿Ð¾ÑÐ¾Ð±Ð½Ð¾ÑÑ‚Ð¸")]
     [SerializeField] private CoreAbilityUI[] abilityUIs;
 
     private void Update()
@@ -42,7 +42,7 @@ public class CoreUI : MonoBehaviour
 
     private void UpdateCoreDisplay()
     {
-        // Ýíåðãèÿ
+        // Ð­Ð½ÐµÑ€Ð³Ð¸Ñ
         if (energySlider != null)
         {
             energySlider.value = playerCore.EnergyPercent;
@@ -53,27 +53,25 @@ public class CoreUI : MonoBehaviour
             energyText.text = $"{playerCore.CurrentEnergy}/{playerCore.MaxEnergy}";
         }
 
-        // Ñîñòîÿíèå
+        // Ð¡Ð¾ÑÑ‚Ð¾ÑÐ½Ð¸Ðµ ÑÐ´Ñ€Ð°: Ð¿ÐµÑ€ÐµÐ³Ñ€ÐµÐ² Ð¿Ð¾ÐºÐ°Ð·Ñ‹Ð²Ð°ÐµÐ¼ Ð¿Ð¾Ð²ÐµÑ€Ñ… Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹, Ð½ÐµÑƒÑÐ·Ð²Ð¸Ð¼Ð¾ÑÑ‚ÑŒ â€” Ð¾Ñ‚Ð´ÐµÐ»ÑŒÐ½Ñ‹Ð¼ Ñ‚ÐµÐºÑÑ‚Ð¾Ð¼
         if (stateText != null)
         {
             if (playerCore.IsOverheated)
             {
-                stateText.text = "ÏÅÐÅÃÐÅÂ";
                 stateText.color = overheatedColor;
             }
             else if (playerCore.IsInvincible)
             {
-                stateText.text = "ÍÅÓßÇÂÈÌÎÑÒÜ";
+                stateText.text = "ÐÐ•Ð£Ð¯Ð—Ð’Ð˜ÐœÐžÐ¡Ð¢Ð¬";
                 stateText.color = ultimateColor;
             }
             else
             {
-                stateText.text = "ÀÊÒÈÂÍÎ";
                 stateText.color = activeColor;
             }
         }
 
-        // Öâåò èêîíêè
+        // Ð¦Ð²ÐµÑ‚ Ð¸ÐºÐ¾Ð½ÐºÐ¸
         if (coreIcon != null)
         {
             if (playerCore.IsOverheated)
@@ -94,6 +92,12 @@ public class CoreUI : MonoBehaviour
         if (heatSlider != null)
         {
             heatSlider.value = overheatSystem.HeatPercent;
+        }
+
+        // ÐŸÐ¾Ð´Ð¿Ð¸ÑÑŒ Ñ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ð¼ ÑÐ¾ÑÑ‚Ð¾ÑÐ½Ð¸ÐµÐ¼ ÑÐ´Ñ€Ð° Ð¸ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð¾Ð¹ (Ð²Ð¸Ð´Ð½Ð¾ Ð±ÐµÐ· ÐºÐ¾Ð½ÑÐ¾Ð»Ð¸)
+        if (stateText != null && !playerCore.IsInvincible)
+        {
+            stateText.text = $"{overheatSystem.State}  {overheatSystem.CurrentHeat:F0}/{overheatSystem.MaxHeat:F0}";
         }
 
         if (heatFill != null)
@@ -152,14 +156,18 @@ public class CoreAbilityUI : MonoBehaviour
 
         if (cooldownOverlay != null)
         {
-            // Ïîêàçûâàåì êóëäàóí åñëè ñïîñîáíîñòü íà ïåðåçàðÿäêå
-            // Çäåñü íóæíà ëîãèêà îòñëåæèâàíèÿ êóëäàóíà
-            cooldownOverlay.enabled = false;
+            // Ð—Ð°Ñ‚ÐµÐ¼Ð½ÐµÐ½Ð¸Ðµ Ð¿Ð¾ Ð¾ÑÑ‚Ð°Ñ‚ÐºÑƒ ÐºÑƒÐ»Ð´Ð°ÑƒÐ½Ð° (fill-Ð¼ÐµÑ‚Ð¾Ð´ Image.Vertical)
+            cooldownOverlay.enabled = true;
+            cooldownOverlay.fillAmount = ability.cooldown > 0f
+                ? ability.CooldownRemaining / ability.cooldown
+                : 0f;
         }
 
         if (cooldownText != null)
         {
-            cooldownText.text = abilityKey.ToString();
+            cooldownText.text = ability.IsOnCooldown
+                ? ability.CooldownRemaining.ToString("0.0")
+                : abilityKey.ToString();
         }
     }
 }

@@ -19,14 +19,14 @@ public class TestLimbSwap : MonoBehaviour
     {
         if (limbSwapSystem == null)
         {
-            Debug.LogError("[TestLimbSwap] LimbSwapSystem не назначен!");
+            Debug.LogError("[TestLimbSwap] LimbSwapSystem РЅРµ РЅР°Р·РЅР°С‡РµРЅ!");
         }
         else
         {
-            Debug.Log("[TestLimbSwap] Система найдена");
-            Debug.Log($"[TestLimbSwap] Доступно голов: {limbSwapSystem.GetAvailableLimbs("Head").Count}");
-            Debug.Log($"[TestLimbSwap] Доступно левых рук: {limbSwapSystem.GetAvailableLimbs("ArmL").Count}");
-            Debug.Log($"[TestLimbSwap] Доступно правых рук: {limbSwapSystem.GetAvailableLimbs("ArmR").Count}");
+            Debug.Log("[TestLimbSwap] РЎРёСЃС‚РµРјР° РЅР°Р№РґРµРЅР°");
+            Debug.Log($"[TestLimbSwap] Р”РѕСЃС‚СѓРїРЅРѕ РіРѕР»РѕРІ: {limbSwapSystem.GetAvailableLimbs("Head").Count}");
+            Debug.Log($"[TestLimbSwap] Р”РѕСЃС‚СѓРїРЅРѕ Р»РµРІС‹С… СЂСѓРє: {limbSwapSystem.GetAvailableLimbs("ArmL").Count}");
+            Debug.Log($"[TestLimbSwap] Р”РѕСЃС‚СѓРїРЅРѕ РїСЂР°РІС‹С… СЂСѓРє: {limbSwapSystem.GetAvailableLimbs("ArmR").Count}");
         }
     }
 
@@ -34,58 +34,58 @@ public class TestLimbSwap : MonoBehaviour
     {
         if (limbSwapSystem == null || keyboard == null) return;
 
-        // Клавиша 1 - заменить голову
+        // РљР»Р°РІРёС€Р° 1 - Р·Р°РјРµРЅРёС‚СЊ РіРѕР»РѕРІСѓ
         if (keyboard[Key.Digit1].wasPressedThisFrame)
         {
             var heads = limbSwapSystem.GetAvailableLimbs("Head");
             if (heads.Count > 0)
             {
                 currentHeadIndex = (currentHeadIndex + 1) % heads.Count;
-                Debug.Log($"[TestLimbSwap] Меняем голову на индекс {currentHeadIndex}: {heads[currentHeadIndex].name}");
+                Debug.Log($"[TestLimbSwap] РњРµРЅСЏРµРј РіРѕР»РѕРІСѓ РЅР° РёРЅРґРµРєСЃ {currentHeadIndex}: {heads[currentHeadIndex].name}");
                 limbSwapSystem.SwapLimb("Head", heads[currentHeadIndex]);
             }
             else
             {
-                Debug.LogWarning("[TestLimbSwap] Нет доступных голов!");
+                Debug.LogWarning("[TestLimbSwap] РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… РіРѕР»РѕРІ!");
             }
         }
 
-        // Клавиша 2 - заменить левую руку
+        // РљР»Р°РІРёС€Р° 2 - Р·Р°РјРµРЅРёС‚СЊ Р»РµРІСѓСЋ СЂСѓРєСѓ
         if (keyboard[Key.Digit2].wasPressedThisFrame)
         {
             var arms = limbSwapSystem.GetAvailableLimbs("ArmL");
             if (arms.Count > 0)
             {
                 currentArmLIndex = (currentArmLIndex + 1) % arms.Count;
-                Debug.Log($"[TestLimbSwap] Меняем левую руку на индекс {currentArmLIndex}: {arms[currentArmLIndex].name}");
+                Debug.Log($"[TestLimbSwap] РњРµРЅСЏРµРј Р»РµРІСѓСЋ СЂСѓРєСѓ РЅР° РёРЅРґРµРєСЃ {currentArmLIndex}: {arms[currentArmLIndex].name}");
                 limbSwapSystem.SwapLimb("ArmL", arms[currentArmLIndex]);
             }
             else
             {
-                Debug.LogWarning("[TestLimbSwap] Нет доступных левых рук!");
+                Debug.LogWarning("[TestLimbSwap] РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… Р»РµРІС‹С… СЂСѓРє!");
             }
         }
 
-        // Клавиша 3 - заменить правую руку
+        // РљР»Р°РІРёС€Р° 3 - Р·Р°РјРµРЅРёС‚СЊ РїСЂР°РІСѓСЋ СЂСѓРєСѓ
         if (keyboard[Key.Digit3].wasPressedThisFrame)
         {
             var arms = limbSwapSystem.GetAvailableLimbs("ArmR");
             if (arms.Count > 0)
             {
                 currentArmRIndex = (currentArmRIndex + 1) % arms.Count;
-                Debug.Log($"[TestLimbSwap] Меняем правую руку на индекс {currentArmRIndex}: {arms[currentArmRIndex].name}");
+                Debug.Log($"[TestLimbSwap] РњРµРЅСЏРµРј РїСЂР°РІСѓСЋ СЂСѓРєСѓ РЅР° РёРЅРґРµРєСЃ {currentArmRIndex}: {arms[currentArmRIndex].name}");
                 limbSwapSystem.SwapLimb("ArmR", arms[currentArmRIndex]);
             }
             else
             {
-                Debug.LogWarning("[TestLimbSwap] Нет доступных правых рук!");
+                Debug.LogWarning("[TestLimbSwap] РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… РїСЂР°РІС‹С… СЂСѓРє!");
             }
         }
 
-        // Клавиша R - сброс
+        // РљР»Р°РІРёС€Р° R - СЃР±СЂРѕСЃ
         if (keyboard[Key.R].wasPressedThisFrame)
         {
-            Debug.Log("[TestLimbSwap] Сброс всех частей");
+            Debug.Log("[TestLimbSwap] РЎР±СЂРѕСЃ РІСЃРµС… С‡Р°СЃС‚РµР№");
         }
     }
 }

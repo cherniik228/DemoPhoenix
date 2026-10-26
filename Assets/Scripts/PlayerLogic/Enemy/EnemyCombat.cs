@@ -2,27 +2,28 @@ using UnityEngine;
 
 public class EnemyCombat : MonoBehaviour
 {
-    [Header("Зависимости")]
+    [Header("Р—Р°РІРёСЃРёРјРѕСЃС‚Рё")]
     [SerializeField] private Transform attackPoint;
     [SerializeField] private LayerMask playerLayerMask;
 
-    [Header("Настройки Атаки")]
+    [Header("РќР°СЃС‚СЂРѕР№РєРё РђС‚Р°РєРё")]
     [SerializeField] private float attackRadius = 2f;
     [SerializeField] private int attackDamage = 15;
     [SerializeField] private float attackCooldown = 2f;
-    [SerializeField] private float attackRange = 3f; // Дистанция для начала атаки
+    [SerializeField] private float attackRange = 3f; // Р”РёСЃС‚Р°РЅС†РёСЏ РґР»СЏ РЅР°С‡Р°Р»Р° Р°С‚Р°РєРё
 
-    [Header("Настройки Урона по Конечностям")]
-    [Tooltip("Если true, урон наносится случайной конечности. Если false - по торсу")]
+    [Header("РќР°СЃС‚СЂРѕР№РєРё РЈСЂРѕРЅР° РїРѕ РљРѕРЅРµС‡РЅРѕСЃС‚СЏРј")]
+    [Tooltip("Р•СЃР»Рё true, СѓСЂРѕРЅ РЅР°РЅРѕСЃРёС‚СЃСЏ СЃР»СѓС‡Р°Р№РЅРѕР№ РєРѕРЅРµС‡РЅРѕСЃС‚Рё. Р•СЃР»Рё false - РїРѕ С‚РѕСЂСЃСѓ")]
     [SerializeField] private bool targetRandomBodyPart = true;
     [SerializeField] private float bodyPartDamageMultiplier = 1f;
 
-    [Header("Визуализация")]
+    [Header("Р’РёР·СѓР°Р»РёР·Р°С†РёСЏ")]
     [SerializeField] private Color attackRadiusColor = Color.red;
     [SerializeField] private Color attackRangeColor = Color.yellow;
 
     private float attackCooldownTimer;
     private bool isAttacking;
+    private System.Collections.Generic.List<BodyPart> activePartsCache;
 
     private void Update()
     {
@@ -36,7 +37,7 @@ public class EnemyCombat : MonoBehaviour
 
     private void TryAttack()
     {
-        // Проверяем, есть ли игрок в радиусе атаки
+        // РџСЂРѕРІРµСЂСЏРµРј, РµСЃС‚СЊ Р»Рё РёРіСЂРѕРє РІ СЂР°РґРёСѓСЃРµ Р°С‚Р°РєРё
         Collider[] hits = Physics.OverlapSphere(attackPoint.position, attackRadius, playerLayerMask);
 
         if (hits.Length > 0)
@@ -50,11 +51,11 @@ public class EnemyCombat : MonoBehaviour
         isAttacking = true;
         attackCooldownTimer = attackCooldown;
 
-        Debug.Log($"[ВРАГ] Атака! Найдено целей: {hits.Length}");
+        Debug.Log($"[Р’Р РђР“] РђС‚Р°РєР°! РќР°Р№РґРµРЅРѕ С†РµР»РµР№: {hits.Length}");
 
         foreach (var hit in hits)
         {
-            // Ищем PlayerStateManager на игроке
+            // РС‰РµРј PlayerStateManager РЅР° РёРіСЂРѕРєРµ
             PlayerStateManager playerState = hit.GetComponentInParent<PlayerStateManager>();
 
             if (playerState != null)
@@ -63,29 +64,29 @@ public class EnemyCombat : MonoBehaviour
 
                 if (targetRandomBodyPart)
                 {
-                    // Наносим урон случайной конечности
+                    // РќР°РЅРѕСЃРёРј СѓСЂРѕРЅ СЃР»СѓС‡Р°Р№РЅРѕР№ РєРѕРЅРµС‡РЅРѕСЃС‚Рё
                     DamageRandomBodyPart(playerState, hitDirection);
                 }
                 else
                 {
-                    // Наносим урон по общему HP
+                    // РќР°РЅРѕСЃРёРј СѓСЂРѕРЅ РїРѕ РѕР±С‰РµРјСѓ HP
                     playerState.TakeDamage(attackDamage, hitDirection);
                 }
             }
         }
 
-        // Здесь можно запустить анимацию атаки
+        // Р—РґРµСЃСЊ РјРѕР¶РЅРѕ Р·Р°РїСѓСЃС‚РёС‚СЊ Р°РЅРёРјР°С†РёСЋ Р°С‚Р°РєРё
         // animator.SetTrigger("Attack");
 
         Invoke(nameof(ResetAttack), 0.5f);
     }
 
     /// <summary>
-    /// Нанести урон случайной конечности игрока
+    /// РќР°РЅРµСЃС‚Рё СѓСЂРѕРЅ СЃР»СѓС‡Р°Р№РЅРѕР№ РєРѕРЅРµС‡РЅРѕСЃС‚Рё РёРіСЂРѕРєР°
     /// </summary>
     private void DamageRandomBodyPart(PlayerStateManager playerState, Vector3 hitDirection)
     {
-        // Получаем все активные конечности игрока
+        // РџРѕР»СѓС‡Р°РµРј РІСЃРµ Р°РєС‚РёРІРЅС‹Рµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё РёРіСЂРѕРєР°
         BodyPart[] allParts = new BodyPart[]
         {
             playerState.Head,
@@ -96,32 +97,34 @@ public class EnemyCombat : MonoBehaviour
             playerState.RightLeg
         };
 
-        // Фильтруем только активные (не оторванные)
-        System.Collections.Generic.List<BodyPart> activeParts = new System.Collections.Generic.List<BodyPart>();
+        // Р¤РёР»СЊС‚СЂСѓРµРј С‚РѕР»СЊРєРѕ Р°РєС‚РёРІРЅС‹Рµ (РЅРµ РѕС‚РѕСЂРІР°РЅРЅС‹Рµ)
+        if (activePartsCache == null)
+            activePartsCache = new System.Collections.Generic.List<BodyPart>(8);
+        activePartsCache.Clear();
 
         foreach (var part in allParts)
         {
             if (part != null && part.IsActive)
             {
-                activeParts.Add(part);
+                activePartsCache.Add(part);
             }
         }
 
-        if (activeParts.Count == 0)
+        if (activePartsCache.Count == 0)
         {
-            // Если все конечности оторваны, наносим урон по общему HP
+            // Р•СЃР»Рё РІСЃРµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё РѕС‚РѕСЂРІР°РЅС‹, РЅР°РЅРѕСЃРёРј СѓСЂРѕРЅ РїРѕ РѕР±С‰РµРјСѓ HP
             playerState.TakeDamage(attackDamage, hitDirection);
-            Debug.Log("[ВРАГ] Все конечности оторваны! Урон по общему HP.");
+            Debug.Log("[Р’Р РђР“] Р’СЃРµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё РѕС‚РѕСЂРІР°РЅС‹! РЈСЂРѕРЅ РїРѕ РѕР±С‰РµРјСѓ HP.");
             return;
         }
 
-        // Выбираем случайную конечность
-        BodyPart randomPart = activeParts[Random.Range(0, activeParts.Count)];
+        // Р’С‹Р±РёСЂР°РµРј СЃР»СѓС‡Р°Р№РЅСѓСЋ РєРѕРЅРµС‡РЅРѕСЃС‚СЊ
+        BodyPart randomPart = activePartsCache[Random.Range(0, activePartsCache.Count)];
 
         int finalDamage = Mathf.RoundToInt(attackDamage * bodyPartDamageMultiplier);
         randomPart.TakeDamage(finalDamage, hitDirection);
 
-        Debug.Log($"[ВРАГ] Урон {finalDamage} по конечности: {randomPart.PartName}");
+        Debug.Log($"[Р’Р РђР“] РЈСЂРѕРЅ {finalDamage} РїРѕ РєРѕРЅРµС‡РЅРѕСЃС‚Рё: {randomPart.PartName}");
     }
 
     private void ResetAttack()
@@ -141,11 +144,11 @@ public class EnemyCombat : MonoBehaviour
     {
         if (attackPoint != null)
         {
-            // Радиус поражения
+            // Р Р°РґРёСѓСЃ РїРѕСЂР°Р¶РµРЅРёСЏ
             Gizmos.color = attackRadiusColor;
             Gizmos.DrawWireSphere(attackPoint.position, attackRadius);
 
-            // Дистанция начала атаки
+            // Р”РёСЃС‚Р°РЅС†РёСЏ РЅР°С‡Р°Р»Р° Р°С‚Р°РєРё
             Gizmos.color = attackRangeColor;
             Gizmos.DrawWireSphere(transform.position, attackRange);
         }

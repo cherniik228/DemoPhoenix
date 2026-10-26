@@ -1,48 +1,51 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System;
 using System.Collections.Generic;
 
 public class PlayerCore : MonoBehaviour
 {
-    [Header("Ссылки")]
+    [Header("РЎРІСЏР·Р°РЅРЅС‹Рµ РєРѕРјРїРѕРЅРµРЅС‚С‹")]
     [SerializeField] private PlayerStateManager stateManager;
     [SerializeField] private PlayerMovement movement;
     [SerializeField] private BodyPart[] bodyParts;
     [SerializeField] private CoreOverheatSystem overheatSystem;
-    [SerializeField] private CoreVisual coreVisual; // <-- Добавлено!
+    [SerializeField] private CoreVisual coreVisual;
 
-    [Header("Настройки ядра")]
+    [Header("Р­РЅРµСЂРіРёСЏ СЏРґСЂР°")]
     [SerializeField] private int maxCoreEnergy = 100;
     [SerializeField] private float energyRegenRate = 5f;
-    [SerializeField] private float overheatedDuration = 5f;
 
-    [Header("Починка")]
+    [Header("Р РµРјРѕРЅС‚")]
     [SerializeField] private int repairEnergyCost = 30;
     [SerializeField] private float repairCooldown = 2f;
 
-    [Header("Способности")]
+    [Header("РЎРїРѕСЃРѕР±РЅРѕСЃС‚Рё")]
     [SerializeField] private List<CoreAbilityBase> abilities = new List<CoreAbilityBase>();
     [SerializeField] private KeyCode[] abilityKeys;
 
     private int currentEnergy;
-    private CoreOverheatSystem.CoreState coreState = CoreOverheatSystem.CoreState.Active;
-    private float overheatedTimer;
     private float repairCooldownTimer;
     private bool isInvincible;
     private float invincibilityTimer;
 
-    // Публичные свойства
+    // РЎРѕР±С‹С‚РёСЏ РґР»СЏ UI Рё РґСЂСѓРіРёС… СЃРёСЃС‚РµРј (РІРјРµСЃС‚Рѕ polling)
+    public event Action<int, int> OnEnergyChanged; // (current, max)
+    public event Action OnBecameOverheated;
+    public event Action OnCooledDown;
+    public event Action OnRepairPerformed;
+
     public int CurrentEnergy => currentEnergy;
     public int MaxEnergy => maxCoreEnergy;
-    public float EnergyPercent => (float)currentEnergy / maxCoreEnergy;
+    public float EnergyPercent => maxCoreEnergy > 0 ? (float)currentEnergy / maxCoreEnergy : 0f;
     public bool IsOverheated => overheatSystem != null && overheatSystem.IsOverheated;
     public bool IsInvincible => isInvincible;
-    public CoreVisual CoreVisual => coreVisual; // <-- Добавлено!
+    public CoreVisual CoreVisual => coreVisual;
 
-    public bool CanUseAbility => coreState == CoreOverheatSystem.CoreState.Active && currentEnergy > 0 && !isInvincible;
-    public bool CanRepair => coreState == CoreOverheatSystem.CoreState.Active &&
+    public bool CanUseAbility => !IsOverheated && currentEnergy > 0 && !isInvincible;
+    public bool CanRepair => !IsOverheated &&
                              currentEnergy >= repairEnergyCost &&
-                             repairCooldownTimer <= 0;
+                             repairCooldownTimer <= 0f;
 
     private Keyboard keyboard;
 
@@ -52,14 +55,28 @@ public class PlayerCore : MonoBehaviour
         keyboard = Keyboard.current;
 
         if (overheatSystem == null)
-        {
             overheatSystem = GetComponent<CoreOverheatSystem>();
-        }
         if (coreVisual == null)
-        {
             coreVisual = GetComponent<CoreVisual>();
+
+        if (overheatSystem != null)
+        {
+            overheatSystem.OnOverheated += HandleBecameOverheated;
+            overheatSystem.OnCooled += HandleCooledDown;
         }
     }
+
+    private void OnDestroy()
+    {
+        if (overheatSystem != null)
+        {
+            overheatSystem.OnOverheated -= HandleBecameOverheated;
+            overheatSystem.OnCooled -= HandleCooledDown;
+        }
+    }
+
+    private void HandleBecameOverheated() => OnBecameOverheated?.Invoke();
+    private void HandleCooledDown() => OnCooledDown?.Invoke();
 
     private void Update()
     {
@@ -71,52 +88,30 @@ public class PlayerCore : MonoBehaviour
 
     private void HandleInput()
     {
-        if (keyboard == null)
+        if (keyboard == null) return;
+
+        // Р РµРјРѕРЅС‚ РЅР° Q
+        if (keyboard[Key.Q].wasPressedThisFrame && CanRepair)
         {
-            Debug.LogWarning("[PlayerCore] Keyboard не инициализирован!");
-            return;
+            RepairAllParts();
         }
 
-        // Починка
-        if (keyboard[Key.Q].wasPressedThisFrame)
-        {
-            Debug.Log("[INPUT] Нажата Q");
-            if (CanRepair)
-            {
-                RepairAllParts();
-            }
-            else
-            {
-                Debug.Log($"[PlayerCore] Нельзя починить. Energy: {currentEnergy}, Cooldown: {repairCooldownTimer}");
-            }
-        }
-
-        // Способности 1-7
+        // РЎРїРѕСЃРѕР±РЅРѕСЃС‚Рё РЅР° РЅР°Р·РЅР°С‡РµРЅРЅС‹С… РєР»Р°РІРёС€Р°С…
         for (int i = 0; i < abilities.Count && i < abilityKeys.Length; i++)
         {
-            KeyCode expectedKey = abilityKeys[i];
-            Key unityKey = (Key)expectedKey;
+            Key unityKey = (Key)abilityKeys[i];
 
             if (keyboard[unityKey].wasPressedThisFrame)
             {
-                Debug.Log($"[INPUT] Нажата клавиша {i + 1} ({expectedKey})");
-                Debug.Log($"[PlayerCore] Способностей: {abilities.Count}, CanUse: {CanUseAbility}");
-
-                if (i < abilities.Count)
-                {
-                    CoreAbilityBase ability = abilities[i];
-                    Debug.Log($"[PlayerCore] Попытка активировать: {ability.abilityName}");
-                    Debug.Log($"[PlayerCore] Energy: {currentEnergy}/{maxCoreEnergy}, Cost: {ability.energyCost}");
-
-                    bool result = UseAbility(i);
-                    Debug.Log($"[PlayerCore] Результат: {result}");
-                }
+                UseAbility(i);
             }
         }
     }
 
     public void RepairAllParts()
     {
+        if (!CanRepair) return;
+
         int brokenCount = 0;
 
         foreach (var part in bodyParts)
@@ -130,15 +125,14 @@ public class PlayerCore : MonoBehaviour
 
         if (brokenCount > 0)
         {
-            currentEnergy -= repairEnergyCost;
+            SpendEnergy(repairEnergyCost);
             repairCooldownTimer = repairCooldown;
 
             if (stateManager != null)
-            {
                 stateManager.Heal(10);
-            }
 
-            Debug.Log($"[ЯДРО] Починено частей: {brokenCount}");
+            Debug.Log($"[PlayerCore] РџРѕС‡РёРЅРµРЅРѕ С‡Р°СЃС‚РµР№: {brokenCount}");
+            OnRepairPerformed?.Invoke();
         }
     }
 
@@ -148,27 +142,32 @@ public class PlayerCore : MonoBehaviour
 
         CoreAbilityBase ability = abilities[index];
 
-        if (!ability.CanActivate(this))
-        {
-            Debug.Log($"[ЯДРО] Нельзя активировать {ability.abilityName}!");
-            return false;
-        }
+        if (!CanUseAbility || !ability.CanActivate(this)) return false;
 
         ability.Activate(this, stateManager, movement);
-        currentEnergy -= ability.energyCost;
+        SpendEnergy(ability.energyCost);
 
         if (overheatSystem != null)
-        {
             overheatSystem.AddHeat(ability.heatGenerated);
-        }
 
-        // Меняем цвет ядра
         if (coreVisual != null)
-        {
             coreVisual.SetCoreColor(ability.GetCoreColor());
-        }
 
         return true;
+    }
+
+    /// <summary>РЎРїРёСЃР°РЅРёРµ СЌРЅРµСЂРіРёРё СЃ СЃРѕР±С‹С‚РёРµРј (РёСЃРїРѕР»СЊР·СѓСЋС‚ СЃРїРѕСЃРѕР±РЅРѕСЃС‚Рё РёР·РІРЅРµ).</summary>
+    public void SpendEnergy(int amount)
+    {
+        currentEnergy = Mathf.Clamp(currentEnergy - amount, 0, maxCoreEnergy);
+        OnEnergyChanged?.Invoke(currentEnergy, maxCoreEnergy);
+    }
+
+    /// <summary>Р’РѕР·РІСЂР°С‚ СЌРЅРµСЂРіРёРё (РЅР°РїСЂРёРјРµСЂ, РїСЂРё РѕС‚РјРµРЅРµ СЃРїРѕСЃРѕР±РЅРѕСЃС‚Рё).</summary>
+    public void RefundEnergy(int amount)
+    {
+        currentEnergy = Mathf.Clamp(currentEnergy + amount, 0, maxCoreEnergy);
+        OnEnergyChanged?.Invoke(currentEnergy, maxCoreEnergy);
     }
 
     public CoreAbilityBase GetAbility(int index)
@@ -182,6 +181,18 @@ public class PlayerCore : MonoBehaviour
     {
         isInvincible = true;
         invincibilityTimer = duration;
+
+        if (stateManager != null)
+        {
+            // Р РµР°Р»СЊРЅР°СЏ РЅРµСѓСЏР·РІРёРјРѕСЃС‚СЊ: РІС…РѕРґСЏС‰РёР№ СѓСЂРѕРЅ x0 РЅР° РІСЂРµРјСЏ РґРµР№СЃС‚РІРёСЏ
+            stateManager.AddEffect(new StatusEffect
+            {
+                effectName = "Invincibility",
+                duration = duration,
+                speedMultiplier = 1f,
+                damageMultiplier = 0f
+            });
+        }
     }
 
     private void HandleInvincibility()
@@ -189,46 +200,31 @@ public class PlayerCore : MonoBehaviour
         if (isInvincible)
         {
             invincibilityTimer -= Time.deltaTime;
-            if (invincibilityTimer <= 0)
-            {
+            if (invincibilityTimer <= 0f)
                 isInvincible = false;
-            }
         }
-    }
-
-    public void OverheatCore()
-    {
-        coreState = CoreOverheatSystem.CoreState.Overheated;
-        overheatedTimer = overheatedDuration;
     }
 
     private void RegenerateEnergy()
     {
         if (currentEnergy < maxCoreEnergy)
         {
-            int oldEnergy = currentEnergy;
-            currentEnergy = Mathf.Min(maxCoreEnergy, currentEnergy + (int)(energyRegenRate * Time.deltaTime));
-
-            // Только для отладки - раскомментируйте если нужно
-             if (oldEnergy != currentEnergy && Time.frameCount % 60 == 0)
-                 Debug.Log($"[REGEN] Energy: {oldEnergy} -> {currentEnergy}");
+            // Р”СЂРѕР±РѕРµ РЅР°РєРѕРїР»РµРЅРёРµ, С‡С‚РѕР±С‹ СЂРµРіРµРЅРµСЂР°С†РёСЏ РЅРµ "РїСЂРѕРіР»Р°С‚С‹РІР°Р»Р°СЃСЊ" РѕРєСЂСѓРіР»РµРЅРёРµРј
+            regenAccumulator += energyRegenRate * Time.deltaTime;
+            int whole = Mathf.FloorToInt(regenAccumulator);
+            if (whole > 0)
+            {
+                regenAccumulator -= whole;
+                SpendEnergy(-whole); // Refund via clamped helper
+            }
         }
     }
 
+    private float regenAccumulator;
+
     private void HandleTimers()
     {
-        if (coreState == CoreOverheatSystem.CoreState.Overheated)
-        {
-            overheatedTimer -= Time.deltaTime;
-            if (overheatedTimer <= 0)
-            {
-                coreState = CoreOverheatSystem.CoreState.Active;
-            }
-        }
-
-        if (repairCooldownTimer > 0)
-        {
+        if (repairCooldownTimer > 0f)
             repairCooldownTimer -= Time.deltaTime;
-        }
     }
 }

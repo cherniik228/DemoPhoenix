@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 public class LimbSwapSystem : MonoBehaviour
 {
-    [Header("Текущие части тела")]
+    [Header("РўРµРєСѓС‰РёРµ С‡Р°СЃС‚Рё С‚РµР»Р°")]
     [SerializeField] private GameObject currentHead;
     [SerializeField] private GameObject currentTorso;
     [SerializeField] private GameObject currentArmL;
@@ -11,7 +11,7 @@ public class LimbSwapSystem : MonoBehaviour
     [SerializeField] private GameObject currentLegL;
     [SerializeField] private GameObject currentLegR;
 
-    [Header("Доступные префабы для замены")]
+    [Header("Р”РѕСЃС‚СѓРїРЅС‹Рµ РїСЂРµС„Р°Р±С‹ РґР»СЏ Р·Р°РјРµРЅС‹")]
     [SerializeField] private List<GameObject> availableHeads = new List<GameObject>();
     [SerializeField] private List<GameObject> availableTorsos = new List<GameObject>();
     [SerializeField] private List<GameObject> availableArmsL = new List<GameObject>();
@@ -19,7 +19,7 @@ public class LimbSwapSystem : MonoBehaviour
     [SerializeField] private List<GameObject> availableLegsL = new List<GameObject>();
     [SerializeField] private List<GameObject> availableLegsR = new List<GameObject>();
 
-    [Header("Кости-якоря на скелете")]
+    [Header("РљРѕСЃС‚Рё-СЏРєРѕСЂСЏ РЅР° СЃРєРµР»РµС‚Рµ")]
     [SerializeField] private Transform boneHead;
     [SerializeField] private Transform boneShoulderL;
     [SerializeField] private Transform boneShoulderR;
@@ -44,57 +44,57 @@ public class LimbSwapSystem : MonoBehaviour
         anchors["LegL"] = boneHipL;
         anchors["LegR"] = boneHipR;
 
-        Debug.Log("[LimbSwap] Система инициализирована");
+        Debug.Log("[LimbSwap] РЎРёСЃС‚РµРјР° РёРЅРёС†РёР°Р»РёР·РёСЂРѕРІР°РЅР°");
     }
 
     public void SwapLimb(string limbType, GameObject newLimbPrefab)
     {
         if (!currentLimbs.ContainsKey(limbType))
         {
-            Debug.LogError($"[LimbSwap] Неизвестный тип: {limbType}");
+            Debug.LogError($"[LimbSwap] РќРµРёР·РІРµСЃС‚РЅС‹Р№ С‚РёРї: {limbType}");
             return;
         }
 
         if (newLimbPrefab == null)
         {
-            Debug.LogError($"[LimbSwap] Префаб не назначен для {limbType}!");
+            Debug.LogError($"[LimbSwap] РџСЂРµС„Р°Р± РЅРµ РЅР°Р·РЅР°С‡РµРЅ РґР»СЏ {limbType}!");
             return;
         }
 
-        Debug.Log($"[LimbSwap] Меняем {limbType} на {newLimbPrefab.name}");
+        Debug.Log($"[LimbSwap] РњРµРЅСЏРµРј {limbType} РЅР° {newLimbPrefab.name}");
 
-        // Получаем якорь ДО удаления старой части
+        // РџРѕР»СѓС‡Р°РµРј СЏРєРѕСЂСЊ Р”Рћ СѓРґР°Р»РµРЅРёСЏ СЃС‚Р°СЂРѕР№ С‡Р°СЃС‚Рё
         Transform anchor = anchors.ContainsKey(limbType) ? anchors[limbType] : null;
         if (anchor == null)
         {
-            Debug.LogError($"[LimbSwap] Якорь не найден для {limbType}!");
+            Debug.LogError($"[LimbSwap] РЇРєРѕСЂСЊ РЅРµ РЅР°Р№РґРµРЅ РґР»СЏ {limbType}!");
             return;
         }
 
-        // Сохраняем позицию и ротацию якоря
+        // РЎРѕС…СЂР°РЅСЏРµРј РїРѕР·РёС†РёСЋ Рё СЂРѕС‚Р°С†РёСЋ СЏРєРѕСЂСЏ
         Vector3 anchorPosition = anchor.position;
         Quaternion anchorRotation = anchor.rotation;
 
-        // Удаляем старую часть
+        // РЈРґР°Р»СЏРµРј СЃС‚Р°СЂСѓСЋ С‡Р°СЃС‚СЊ
         if (currentLimbs[limbType] != null)
         {
             Destroy(currentLimbs[limbType].gameObject);
         }
 
-        // Создаём новую
+        // РЎРѕР·РґР°С‘Рј РЅРѕРІСѓСЋ
         GameObject newLimb = Instantiate(newLimbPrefab, anchorPosition, anchorRotation);
         newLimb.name = limbType + "_Instance";
 
-        // Делаем дочерним объектом торса
+        // Р”РµР»Р°РµРј РґРѕС‡РµСЂРЅРёРј РѕР±СЉРµРєС‚РѕРј С‚РѕСЂСЃР°
         newLimb.transform.SetParent(currentTorso.transform);
 
-        // ВАЖНО: Сбрасываем локальную позицию и ротацию
+        // Р’РђР–РќРћ: РЎР±СЂР°СЃС‹РІР°РµРј Р»РѕРєР°Р»СЊРЅСѓСЋ РїРѕР·РёС†РёСЋ Рё СЂРѕС‚Р°С†РёСЋ
         newLimb.transform.localPosition = Vector3.zero;
         newLimb.transform.localRotation = Quaternion.identity;
 
         currentLimbs[limbType] = newLimb;
 
-        Debug.Log($"[LimbSwap] {limbType} заменена! Позиция якоря: {anchorPosition}");
+        Debug.Log($"[LimbSwap] {limbType} Р·Р°РјРµРЅРµРЅР°! РџРѕР·РёС†РёСЏ СЏРєРѕСЂСЏ: {anchorPosition}");
     }
 
     public GameObject GetCurrentLimb(string limbType)

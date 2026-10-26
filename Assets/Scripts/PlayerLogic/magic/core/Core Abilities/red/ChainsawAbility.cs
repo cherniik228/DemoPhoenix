@@ -3,8 +3,8 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "ChainsawAbility", menuName = "Core Abilities/Combat/Chainsaw")]
 public class ChainsawAbility : CoreAbilityBase
 {
-    [Header("Бензопила")]
-    [SerializeField] private float chainsawDamage = 10f; // Урон в секунду
+    [Header("Р‘РµРЅР·РѕРїРёР»Р°")]
+    [SerializeField] private float chainsawDamage = 10f; // РЈСЂРѕРЅ РІ СЃРµРєСѓРЅРґСѓ
     [SerializeField] private float duration = 3f;
     [SerializeField] private float attackRadius = 1.5f;
     [SerializeField] private LayerMask enemyMask;
@@ -13,36 +13,36 @@ public class ChainsawAbility : CoreAbilityBase
 
     public ChainsawAbility()
     {
-        abilityName = "Бензопила";
+        abilityName = "Р‘РµРЅР·РѕРїРёР»Р°";
         abilityType = AbilityType.Combat;
         energyCost = 20;
-        heatGenerated = 20f; // Высокий нагрев
+        heatGenerated = 20f; // Р’С‹СЃРѕРєРёР№ РЅР°РіСЂРµРІ
     }
 
     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
     {
         if (stateManager.LeftArm == null || !stateManager.LeftArm.IsActive)
         {
-            Debug.Log("[БЕНЗОПИЛА] Левая рука отсутствует!");
+            Debug.Log("[Р‘Р•РќР—РћРџРР›Рђ] Р›РµРІР°СЏ СЂСѓРєР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚!");
             return;
         }
 
-        // Запускаем бензопилу на duration секунд
+        // Р—Р°РїСѓСЃРєР°РµРј Р±РµРЅР·РѕРїРёР»Сѓ РЅР° duration СЃРµРєСѓРЅРґ
         core.StartCoroutine(ChainsawCoroutine(core, stateManager));
     }
 
     private System.Collections.IEnumerator ChainsawCoroutine(PlayerCore core, PlayerStateManager stateManager)
     {
         float timer = 0f;
-        float damageInterval = 0.5f; // Урон каждые 0.5 сек
+        float damageInterval = 0.5f; // РЈСЂРѕРЅ РєР°Р¶РґС‹Рµ 0.5 СЃРµРє
 
-        Debug.Log("[БЕНЗОПИЛА] Активирована!");
+        Debug.Log("[Р‘Р•РќР—РћРџРР›Рђ] РђРєС‚РёРІРёСЂРѕРІР°РЅР°!");
 
         while (timer < duration)
         {
             if (timer >= damageTimer)
             {
-                // Наносим урон всем в радиусе
+                // РќР°РЅРѕСЃРёРј СѓСЂРѕРЅ РІСЃРµРј РІ СЂР°РґРёСѓСЃРµ
                 Collider[] enemies = Physics.OverlapSphere(core.transform.position, attackRadius, enemyMask);
 
                 foreach (var enemy in enemies)
@@ -61,6 +61,6 @@ public class ChainsawAbility : CoreAbilityBase
             yield return null;
         }
 
-        Debug.Log("[БЕНЗОПИЛА] Завершена!");
+        Debug.Log("[Р‘Р•РќР—РћРџРР›Рђ] Р—Р°РІРµСЂС€РµРЅР°!");
     }
 }
