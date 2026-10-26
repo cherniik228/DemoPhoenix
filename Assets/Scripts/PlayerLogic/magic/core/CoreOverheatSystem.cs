@@ -28,6 +28,7 @@ public class CoreOverheatSystem : MonoBehaviour
 
     public float CurrentHeat => currentHeat;
     public float HeatPercent => maxHeat > 0 ? currentHeat / maxHeat : 0;
+    public float OverheatThreshold => overheatThreshold;
     public bool IsOverheated => isOverheated;
     public float MaxHeat => maxHeat;
     public float CoolingRate => coolingRate;
