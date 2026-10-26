@@ -3,13 +3,13 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "WeaknessDebuff", menuName = "Core Abilities/Debuff/Weakness")]
 public class WeaknessDebuff : CoreAbilityBase
 {
-    [Header("Дебаф")]
+    [Header("Р”РµР±Р°С„")]
     [SerializeField] private float duration = 15f;
-    [SerializeField] private float damageMultiplier = 0.5f; // Урон врага / 2
+    [SerializeField] private float damageMultiplier = 0.5f; // РЈСЂРѕРЅ РІСЂР°РіР° / 2
 
     public WeaknessDebuff()
     {
-        abilityName = "Слабость";
+        abilityName = "РЎР»Р°Р±РѕСЃС‚СЊ";
         abilityType = AbilityType.BuffDebuff;
         energyCost = 20;
         heatGenerated = 10f;
@@ -17,12 +17,12 @@ public class WeaknessDebuff : CoreAbilityBase
 
     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
     {
-        // Находим ближайшего врага
+        // РќР°С…РѕРґРёРј Р±Р»РёР¶Р°Р№С€РµРіРѕ РІСЂР°РіР°
         Collider[] enemies = Physics.OverlapSphere(core.transform.position, 20f, LayerMask.GetMask("Enemy"));
 
         if (enemies.Length > 0)
         {
-            // Применяем дебаф к ближайшему врагу
+            // РџСЂРёРјРµРЅСЏРµРј РґРµР±Р°С„ Рє Р±Р»РёР¶Р°Р№С€РµРјСѓ РІСЂР°РіСѓ
             EnemyStateManager nearestEnemy = null;
             float nearestDistance = Mathf.Infinity;
 
@@ -43,7 +43,7 @@ public class WeaknessDebuff : CoreAbilityBase
             if (nearestEnemy != null)
             {
                 nearestEnemy.ApplyDamageMultiplier(damageMultiplier, duration);
-                Debug.Log($"[ДЕБАФ] Слабость применена к {nearestEnemy.name} на {duration} сек!");
+                Debug.Log($"[Р”Р•Р‘РђР¤] РЎР»Р°Р±РѕСЃС‚СЊ РїСЂРёРјРµРЅРµРЅР° Рє {nearestEnemy.name} РЅР° {duration} СЃРµРє!");
             }
         }
     }

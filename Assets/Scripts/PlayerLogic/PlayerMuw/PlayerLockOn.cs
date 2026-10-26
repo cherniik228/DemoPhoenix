@@ -2,13 +2,13 @@ using UnityEngine;
 
 public class PlayerLockOn : MonoBehaviour
 {
-    [Header("Зависимости")]
+    [Header("Р—Р°РІРёСЃРёРјРѕСЃС‚Рё")]
     [SerializeField] private PlayerInputHandler inputHandler;
     [SerializeField] private PlayerMovement movement;
     [SerializeField] private PlayerStateManager stateManager;
-    [SerializeField] private CameraController cameraController; // Перетащите камеру сюда!
+    [SerializeField] private CameraController cameraController; // РџРµСЂРµС‚Р°С‰РёС‚Рµ РєР°РјРµСЂСѓ СЃСЋРґР°!
 
-    [Header("Настройки Lock-On")]
+    [Header("РќР°СЃС‚СЂРѕР№РєРё Lock-On")]
     [SerializeField] private float lockOnRadius = 10f;
     [SerializeField] private LayerMask enemyMask;
 
@@ -19,7 +19,7 @@ public class PlayerLockOn : MonoBehaviour
     private void Update()
     {
         if (stateManager != null && stateManager.IsDead) return;
-        if (movement != null && movement.IsDashing) return; // Нельзя лочиться во время рывка
+        if (movement != null && movement.IsDashing) return; // РќРµР»СЊР·СЏ Р»РѕС‡РёС‚СЊСЃСЏ РІРѕ РІСЂРµРјСЏ СЂС‹РІРєР°
 
         HandleLockOn();
     }

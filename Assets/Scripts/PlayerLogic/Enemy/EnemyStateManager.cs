@@ -1,59 +1,56 @@
 using UnityEngine;
 using System;
 
-public class EnemyStateManager : MonoBehaviour, IDamageable
+/// <summary>
+/// Система здоровья врага. Наследует общую логику HP у StateManagerBase,
+/// добавляет поддержку дебаффов (WeaknessDebuff) через StatusEffectSystem.
+/// </summary>
+public class EnemyStateManager : StateManagerBase, IDamageable
 {
-    [Header("��������")]
-    [SerializeField] private int maxHealth = 100;
-    private int currentHealth;
-    public bool IsDead { get; private set; }
-
-    [Header("����������")]
+    [Header("Части тела (опционально)")]
     [SerializeField] private EnemyBodyPart[] bodyParts;
 
-    public event Action<int, int> OnHealthChanged;
-    public event Action OnDeath;
+    public EnemyBodyPart[] BodyParts => bodyParts;
 
-    public float HealthPercent => maxHealth > 0 ? (float)currentHealth / maxHealth : 0f;
+    [Header("Статусные эффекты")]
+    [SerializeField] private StatusEffectSystem statusEffects;
 
-    private void Awake()
+    protected override void Awake()
     {
-        currentHealth = maxHealth;
+        base.Awake();
+
+        if (statusEffects == null)
+            statusEffects = GetComponent<StatusEffectSystem>();
+        if (statusEffects == null)
+            statusEffects = gameObject.AddComponent<StatusEffectSystem>();
     }
 
-    public void TakeDamage(int amount, Vector3 hitDirection)
-    {
-        if (IsDead) return;
-
-        currentHealth -= amount;
-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
-
-        if (currentHealth <= 0)
-        {
-            currentHealth = 0;
-            Die();
-        }
-    }
-
-    // ���������: ����� ��� ������
+    /// <summary>
+    /// Накладывает множитель входящего урона на время (используется WeaknessDebuff).
+    /// Реализовано через реальную систему эффектов вместо заглушки-коротины.
+    /// </summary>
     public void ApplyDamageMultiplier(float multiplier, float duration)
     {
-        StartCoroutine(DamageMultiplierCoroutine(multiplier, duration));
+        statusEffects.AddEffect(new StatusEffect
+        {
+            effectName = "Weakness",
+            duration = duration,
+            speedMultiplier = 1f,
+            damageMultiplier = Mathf.Max(0f, multiplier)
+        });
+        Debug.Log($"[EnemyStateManager] {name}: входящий урон x{multiplier} на {duration}с");
     }
 
-    private System.Collections.IEnumerator DamageMultiplierCoroutine(float multiplier, float duration)
+    /// <summary>Базовый TakeDamage уже применяет GetIncomingDamageMultiplier в StateManagerBase.</summary>
+    protected override float GetIncomingDamageMultiplier()
     {
-        // ����� ����� ��������� ��������� �����
-        Debug.Log($"[����] ���� x{multiplier} �� {duration} ���");
-        yield return new WaitForSeconds(duration);
-        Debug.Log("[����] ����� ����������");
+        return statusEffects != null ? statusEffects.GetDamageMultiplier() : 1f;
     }
 
-    private void Die()
+    protected override void Die()
     {
-        IsDead = true;
-        Debug.Log("[����] �����!");
-        OnDeath?.Invoke();
+        base.Die();
+        Debug.Log($"[EnemyStateManager] {name} мёртв!");
 
         if (TryGetComponent<EnemyCombat>(out var combat)) combat.enabled = false;
     }

@@ -21,7 +21,7 @@ public class CloneController : MonoBehaviour
     {
         timer += Time.deltaTime;
 
-        // Êëîí ñëåäóåò çà èãðîêîì
+        // ÐšÐ»Ð¾Ð½ ÑÐ»ÐµÐ´ÑƒÐµÑ‚ Ð·Ð° Ð¸Ð³Ñ€Ð¾ÐºÐ¾Ð¼
         if (ownerCore != null)
         {
             Vector3 targetPos = ownerCore.transform.position + Vector3.right * 3;
@@ -29,7 +29,7 @@ public class CloneController : MonoBehaviour
             transform.rotation = ownerCore.transform.rotation;
         }
 
-        // Àâòîóíè÷òîæåíèå
+        // ÐÐ²Ñ‚Ð¾ÑƒÐ½Ð¸Ñ‡Ñ‚Ð¾Ð¶ÐµÐ½Ð¸Ðµ
         if (timer >= duration)
         {
             Destroy(gameObject);

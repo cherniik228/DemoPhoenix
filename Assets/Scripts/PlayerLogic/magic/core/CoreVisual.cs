@@ -2,13 +2,13 @@ using UnityEngine;
 
 public class CoreVisual : MonoBehaviour
 {
-    [Header("Ссылки")]
+    [Header("РЎСЃС‹Р»РєРё")]
     [SerializeField] private Renderer coreRenderer;
     [SerializeField] private ParticleSystem regenerationEffect;
     [SerializeField] private ParticleSystem buffEffect;
     [SerializeField] private ParticleSystem ultimateEffect;
 
-    [Header("Цвета состояний")]
+    [Header("Р¦РІРµС‚Р° СЃРѕСЃС‚РѕСЏРЅРёР№")]
     [SerializeField] private Color normalColor = Color.cyan;
     [SerializeField] private Color overheatedColor = Color.red;
 
@@ -26,7 +26,7 @@ public class CoreVisual : MonoBehaviour
 
     private void Update()
     {
-        // Плавный переход цвета
+        // РџР»Р°РІРЅС‹Р№ РїРµСЂРµС…РѕРґ С†РІРµС‚Р°
         if (coreRenderer != null)
         {
             coreRenderer.GetPropertyBlock(propertyBlock);

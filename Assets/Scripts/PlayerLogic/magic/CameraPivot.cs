@@ -3,19 +3,19 @@ using UnityEngine.InputSystem;
 
 public class CameraController : MonoBehaviour
 {
-    [Header("Ссылки")]
-    [SerializeField] private Transform cameraPivot; // Пустой объект на КОРНЕ игрока (НЕ на модели!)
+    [Header("РЎСЃС‹Р»РєРё")]
+    [SerializeField] private Transform cameraPivot; // РџСѓСЃС‚РѕР№ РѕР±СЉРµРєС‚ РЅР° РљРћР РќР• РёРіСЂРѕРєР° (РќР• РЅР° РјРѕРґРµР»Рё!)
     [SerializeField] private Camera mainCamera;
-    [SerializeField] private Transform target; // Корень игрока (НЕ модель!)
+    [SerializeField] private Transform target; // РљРѕСЂРµРЅСЊ РёРіСЂРѕРєР° (РќР• РјРѕРґРµР»СЊ!)
 
-    [Header("Настройки камеры")]
+    [Header("РќР°СЃС‚СЂРѕР№РєРё РєР°РјРµСЂС‹")]
     [SerializeField] private float mouseSensitivity = 2f;
     [SerializeField] private float minPitch = -30f;
     [SerializeField] private float maxPitch = 60f;
     [SerializeField] private float distance = 5f;
     [SerializeField] private float pivotHeight = 1.5f;
 
-    [Header("Плавность")]
+    [Header("РџР»Р°РІРЅРѕСЃС‚СЊ")]
     [SerializeField] private float positionSmoothTime = 0.2f;
 
     private float xRotation = 0f;
@@ -56,7 +56,7 @@ public class CameraController : MonoBehaviour
             mouseDelta = Mouse.current.delta.ReadValue();
         }
 
-        // Вращение камеры мышью
+        // Р’СЂР°С‰РµРЅРёРµ РєР°РјРµСЂС‹ РјС‹С€СЊСЋ
         float mouseX = mouseDelta.x * mouseSensitivity * 0.1f;
         float mouseY = mouseDelta.y * mouseSensitivity * 0.1f;
 
@@ -69,20 +69,20 @@ public class CameraController : MonoBehaviour
 
     private void UpdateCamera()
     {
-        // Позиция пивота (центр вращения камеры)
+        // РџРѕР·РёС†РёСЏ РїРёРІРѕС‚Р° (С†РµРЅС‚СЂ РІСЂР°С‰РµРЅРёСЏ РєР°РјРµСЂС‹)
         Vector3 pivotPosition = target.position + Vector3.up * pivotHeight;
 
-        // Позиция камеры относительно пивота
+        // РџРѕР·РёС†РёСЏ РєР°РјРµСЂС‹ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ РїРёРІРѕС‚Р°
         Vector3 offset = Quaternion.Euler(xRotation, yRotation, 0f) * Vector3.back * distance;
         Vector3 desiredPosition = pivotPosition + offset;
 
-        // Коллизия со стенами
+        // РљРѕР»Р»РёР·РёСЏ СЃРѕ СЃС‚РµРЅР°РјРё
         if (Physics.Linecast(pivotPosition, desiredPosition, out RaycastHit hit))
         {
             desiredPosition = hit.point - (hit.normal * 0.3f);
         }
 
-        // Плавное движение камеры
+        // РџР»Р°РІРЅРѕРµ РґРІРёР¶РµРЅРёРµ РєР°РјРµСЂС‹
         mainCamera.transform.position = Vector3.SmoothDamp(
             mainCamera.transform.position,
             desiredPosition,
@@ -90,7 +90,7 @@ public class CameraController : MonoBehaviour
             positionSmoothTime
         );
 
-        // Камера смотрит на пивот
+        // РљР°РјРµСЂР° СЃРјРѕС‚СЂРёС‚ РЅР° РїРёРІРѕС‚
         mainCamera.transform.LookAt(pivotPosition);
     }
 

@@ -2,18 +2,18 @@ using UnityEngine;
 
 public class PlayerCombat : MonoBehaviour
 {
-    [Header("Зависимости")]
+    [Header("Р—Р°РІРёСЃРёРјРѕСЃС‚Рё")]
     [SerializeField] private PlayerInputHandler inputHandler;
     [SerializeField] private PlayerMovement movement;
     [SerializeField] private PlayerStateManager stateManager;
     [SerializeField] private Transform attackPoint;
 
-    [Header("Настройки Атак")]
+    [Header("РќР°СЃС‚СЂРѕР№РєРё РђС‚Р°Рє")]
     [SerializeField] private float attackRadius = 1.5f;
     [SerializeField] private int attackDamage = 10;
     [SerializeField] private float attackCooldown = 0.5f;
 
-    [Header("Заряженная Атака")]
+    [Header("Р—Р°СЂСЏР¶РµРЅРЅР°СЏ РђС‚Р°РєР°")]
     [SerializeField] private float maxChargeTime = 2f;
     [SerializeField] private float chargedAttackRadius = 2.5f;
     [SerializeField] private int chargedDamage = 30;
@@ -42,7 +42,7 @@ public class PlayerCombat : MonoBehaviour
             int dmg = attackDamage;
             if (stateManager != null)
             {
-                // ИСПРАВЛЕНО: используем множитель урона, а не скорости!
+                // РРЎРџР РђР’Р›Р•РќРћ: РёСЃРїРѕР»СЊР·СѓРµРј РјРЅРѕР¶РёС‚РµР»СЊ СѓСЂРѕРЅР°, Р° РЅРµ СЃРєРѕСЂРѕСЃС‚Рё!
                 dmg = Mathf.RoundToInt(dmg * stateManager.GetDamageMultiplier());
             }
             PerformAttack(attackRadius, dmg);

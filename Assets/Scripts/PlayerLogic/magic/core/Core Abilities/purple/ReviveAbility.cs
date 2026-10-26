@@ -3,26 +3,26 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "ReviveAbility", menuName = "Core Abilities/Ultimate/Revive")]
 public class ReviveAbility : CoreAbilityBase
 {
-    [Header("Возрождение")]
+    [Header("Р’РѕР·СЂРѕР¶РґРµРЅРёРµ")]
     [SerializeField] private float invincibilityDuration = 5f;
 
     public ReviveAbility()
     {
-        abilityName = "Возрождение";
+        abilityName = "Р’РѕР·СЂРѕР¶РґРµРЅРёРµ";
         abilityType = AbilityType.Ultimate;
-        energyCost = 100; // Максимальная стоимость
-        heatGenerated = 100f; // Максимальный нагрев!
+        energyCost = 100; // РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ СЃС‚РѕРёРјРѕСЃС‚СЊ
+        heatGenerated = 100f; // РњР°РєСЃРёРјР°Р»СЊРЅС‹Р№ РЅР°РіСЂРµРІ!
     }
 
     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
     {
-        // Сохраняем позицию смерти
+        // РЎРѕС…СЂР°РЅСЏРµРј РїРѕР·РёС†РёСЋ СЃРјРµСЂС‚Рё
         Vector3 deathPosition = core.transform.position;
 
-        // Возрождаем игрока
+        // Р’РѕР·СЂРѕР¶РґР°РµРј РёРіСЂРѕРєР°
         stateManager.Revive();
 
-        // Восстанавливаем все конечности
+        // Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РІСЃРµ РєРѕРЅРµС‡РЅРѕСЃС‚Рё
         foreach (var part in stateManager.BodyParts)
         {
             if (part != null && part.State != BodyPart.PartState.Severed)
@@ -31,18 +31,18 @@ public class ReviveAbility : CoreAbilityBase
             }
         }
 
-        // Телепортируем на место смерти
+        // РўРµР»РµРїРѕСЂС‚РёСЂСѓРµРј РЅР° РјРµСЃС‚Рѕ СЃРјРµСЂС‚Рё
         core.transform.position = deathPosition;
 
-        // Даем неуязвимость
+        // Р”Р°РµРј РЅРµСѓСЏР·РІРёРјРѕСЃС‚СЊ
         core.ApplyInvincibility(invincibilityDuration);
 
-        // Визуальный эффект
+        // Р’РёР·СѓР°Р»СЊРЅС‹Р№ СЌС„С„РµРєС‚
         if (core.CoreVisual != null)
         {
             core.CoreVisual.PlayUltimateEffect();
         }
 
-        Debug.Log($"[УЛЬТИМЕЙТ] Возрождение! Неуязвимость на {invincibilityDuration} сек!");
+        Debug.Log($"[РЈР›Р¬РўРРњР•Р™Рў] Р’РѕР·СЂРѕР¶РґРµРЅРёРµ! РќРµСѓСЏР·РІРёРјРѕСЃС‚СЊ РЅР° {invincibilityDuration} СЃРµРє!");
     }
 }

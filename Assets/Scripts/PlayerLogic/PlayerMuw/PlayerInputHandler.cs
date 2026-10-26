@@ -12,7 +12,7 @@ public class PlayerInputHandler : MonoBehaviour
     private void OnEnable() => playerInputActions.Player.Enable();
     private void OnDisable() => playerInputActions.Player.Disable();
 
-    // Ñâîéñòâà äëÿ ÷òåíèÿ ââîäà äðóãèìè êîìïîíåíòàìè
+    // Ð¡Ð²Ð¾Ð¹ÑÑ‚Ð²Ð° Ð´Ð»Ñ Ñ‡Ñ‚ÐµÐ½Ð¸Ñ Ð²Ð²Ð¾Ð´Ð° Ð´Ñ€ÑƒÐ³Ð¸Ð¼Ð¸ ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ð°Ð¼Ð¸
     public Vector2 MoveInput => playerInputActions.Player.Move.ReadValue<Vector2>();
     public bool IsRunning => playerInputActions.Player.Run.IsPressed();
 

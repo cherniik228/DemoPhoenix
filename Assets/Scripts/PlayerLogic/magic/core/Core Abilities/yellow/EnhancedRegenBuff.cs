@@ -3,24 +3,24 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "EnhancedRegenBuff", menuName = "Core Abilities/Buff/Enhanced Regeneration")]
 public class EnhancedRegenBuff : CoreAbilityBase
 {
-    [Header("Баф")]
+    [Header("Р‘Р°С„")]
     [SerializeField] private float duration = 10f;
-    [SerializeField] private float regenMultiplier = 2f; // x2 регенерация
+    [SerializeField] private float regenMultiplier = 2f; // x2 СЂРµРіРµРЅРµСЂР°С†РёСЏ
 
     public EnhancedRegenBuff()
     {
-        abilityName = "Усиленная регенерация";
+        abilityName = "РЈСЃРёР»РµРЅРЅР°СЏ СЂРµРіРµРЅРµСЂР°С†РёСЏ";
         abilityType = AbilityType.BuffDebuff;
         energyCost = 15;
-        heatGenerated = 8f; // Малый нагрев
+        heatGenerated = 8f; // РњР°Р»С‹Р№ РЅР°РіСЂРµРІ
     }
 
     protected override void Execute(PlayerCore core, PlayerStateManager stateManager, PlayerMovement movement)
     {
-        // Добавляем баф усиленной регенерации
+        // Р”РѕР±Р°РІР»СЏРµРј Р±Р°С„ СѓСЃРёР»РµРЅРЅРѕР№ СЂРµРіРµРЅРµСЂР°С†РёРё
         StatusEffect buff = new StatusEffect
         {
-            effectName = "Усиленная регенерация",
+            effectName = "РЈСЃРёР»РµРЅРЅР°СЏ СЂРµРіРµРЅРµСЂР°С†РёСЏ",
             duration = duration,
             speedMultiplier = 1f,
             damageMultiplier = 1f
@@ -28,12 +28,12 @@ public class EnhancedRegenBuff : CoreAbilityBase
 
         stateManager.AddEffect(buff);
 
-        // Визуальный эффект
+        // Р’РёР·СѓР°Р»СЊРЅС‹Р№ СЌС„С„РµРєС‚
         if (core.CoreVisual != null)
         {
             core.CoreVisual.PlayBuffEffect(Color.yellow);
         }
 
-        Debug.Log($"[БАФ] Усиленная регенерация на {duration} сек!");
+        Debug.Log($"[Р‘РђР¤] РЈСЃРёР»РµРЅРЅР°СЏ СЂРµРіРµРЅРµСЂР°С†РёСЏ РЅР° {duration} СЃРµРє!");
     }
 }
