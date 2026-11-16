@@ -1,0 +1,171 @@
+From 4335a213d2054e3836e237917f2ab1168aa2a858 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Mon, 26 Oct 2026 20:01:43 +0000
+Subject: [PATCH 3/3] Rebind ability keys to 4-7 and decouple core color from
+ categories
+
+- PlayerCore.cs: Replaced per-ability key binding with category-based activation using keys 4 (Combat), 5 (BuffDebuff), 6 (Regeneration), and 7 (Ultimate); added console logging for ability category usage and failure reasons.
+- CoreVisual.cs: Added `driveColorFromHeat` toggle to make core color reflect only current heat level (blue-to-red gradient) instead of ability category; removed logic that set color based on specific ability types.
+- CoreOverheatSystem.cs: Exposed `OverheatThreshold` property to support visual heat mapping in CoreVisual.
+---
+ .../magic/core/CoreOverheatSystem.cs          |  1 +
+ .../PlayerLogic/magic/core/CoreVisual.cs      | 22 ++++++
+ .../PlayerLogic/magic/core/PlayerCore.cs      | 71 +++++++++++++++----
+ 3 files changed, 79 insertions(+), 15 deletions(-)
+
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/CoreOverheatSystem.cs b/Assets/Scripts/PlayerLogic/magic/core/CoreOverheatSystem.cs
+index db66b5f..a34f5b3 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/CoreOverheatSystem.cs
++++ b/Assets/Scripts/PlayerLogic/magic/core/CoreOverheatSystem.cs
+@@ -28,6 +28,7 @@ public class CoreOverheatSystem : MonoBehaviour
+ 
+     public float CurrentHeat => currentHeat;
+     public float HeatPercent => maxHeat > 0 ? currentHeat / maxHeat : 0;
++    public float OverheatThreshold => overheatThreshold;
+     public bool IsOverheated => isOverheated;
+     public float MaxHeat => maxHeat;
+     public float CoolingRate => coolingRate;
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/CoreVisual.cs b/Assets/Scripts/PlayerLogic/magic/core/CoreVisual.cs
+index 77ceb81..5e8baa5 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/CoreVisual.cs
++++ b/Assets/Scripts/PlayerLogic/magic/core/CoreVisual.cs
+@@ -12,6 +12,13 @@ public class CoreVisual : MonoBehaviour
+     [SerializeField] private Color normalColor = Color.cyan;
+     [SerializeField] private Color overheatedColor = Color.red;
+ 
++    [Header("Цвет от нагрева ядра")]
++    [Tooltip("Если включено, цвет ядра показывает только текущий нагрев (синий -> красный), а не категорию способности.")]
++    [SerializeField] private bool driveColorFromHeat = true;
++    [SerializeField] private Color coldColor = new Color(0.2f, 0.6f, 1f);
++    [SerializeField] private Color hotColor = new Color(1f, 0.45f, 0.1f);
++    [SerializeField] private CoreOverheatSystem overheatSource;
++
+     private MaterialPropertyBlock propertyBlock;
+     private Color currentTargetColor = Color.cyan;
+     private float colorTransitionSpeed = 2f;
+@@ -26,6 +33,21 @@ public class CoreVisual : MonoBehaviour
+ 
+     private void Update()
+     {
++        // Цвет ядра отражает только текущий нагрев (категории больше не влияют на цвет)
++        if (driveColorFromHeat && overheatSource != null)
++        {
++            if (overheatSource.IsOverheated)
++            {
++                currentTargetColor = overheatedColor;
++            }
++            else
++            {
++                float t = Mathf.InverseLerp(0f, Mathf.Max(0.01f, overheatSource.OverheatThreshold),
++                                            overheatSource.CurrentHeat);
++                currentTargetColor = Color.Lerp(coldColor, hotColor, t);
++            }
++        }
++
+         // Плавный переход цвета
+         if (coreRenderer != null)
+         {
+diff --git a/Assets/Scripts/PlayerLogic/magic/core/PlayerCore.cs b/Assets/Scripts/PlayerLogic/magic/core/PlayerCore.cs
+index 229ea9e..925c966 100644
+--- a/Assets/Scripts/PlayerLogic/magic/core/PlayerCore.cs
++++ b/Assets/Scripts/PlayerLogic/magic/core/PlayerCore.cs
+@@ -22,7 +22,12 @@ public class PlayerCore : MonoBehaviour
+ 
+     [Header("Способности")]
+     [SerializeField] private List<CoreAbilityBase> abilities = new List<CoreAbilityBase>();
+-    [SerializeField] private KeyCode[] abilityKeys;
++
++    [Header("Клавиши категорий способностей (по умолчанию: 4,5,6,7)")]
++    [SerializeField] private Key combatKey = Key.Digit4;      // красные (Combat) — пила/лазеры
++    [SerializeField] private Key buffDebuffKey = Key.Digit5;  // жёлтые (BuffDebuff)
++    [SerializeField] private Key regenKey = Key.Digit6;       // зелёные (Regeneration)
++    [SerializeField] private Key ultimateKey = Key.Digit7;    // фиолетовые (Ultimate)
+ 
+     private int currentEnergy;
+     private float repairCooldownTimer;
+@@ -96,16 +101,60 @@ public class PlayerCore : MonoBehaviour
+             RepairAllParts();
+         }
+ 
+-        // Способности на назначенных клавишах
+-        for (int i = 0; i < abilities.Count && i < abilityKeys.Length; i++)
++        // Способности по категориям: 4 — красные, 5 — жёлтые, 6 — зелёные, 7 — фиолетовые
++        TryActivateCategory(combatKey, CoreAbilityBase.AbilityType.Combat);
++        TryActivateCategory(buffDebuffKey, CoreAbilityBase.AbilityType.BuffDebuff);
++        TryActivateCategory(regenKey, CoreAbilityBase.AbilityType.Regeneration);
++        TryActivateCategory(ultimateKey, CoreAbilityBase.AbilityType.Ultimate);
++    }
++
++    /// <summary>Активирует первую доступную способность указанной категории.</summary>
++    private void TryActivateCategory(Key key, CoreAbilityBase.AbilityType type)
++    {
++        if (!keyboard[key].wasPressedThisFrame) return;
++
++        foreach (var ability in abilities)
+         {
+-            Key unityKey = (Key)abilityKeys[i];
++            if (ability == null || ability.abilityType != type) continue;
+ 
+-            if (keyboard[unityKey].wasPressedThisFrame)
++            if (CanUseAbility && ability.CanActivate(this))
++            {
++                ActivateAbility(ability);
++                Debug.Log($"[СПОСОБНОСТЬ] Категория «{GetCategoryName(type)}» активирована: {ability.abilityName}");
++                return;
++            }
++            else
+             {
+-                UseAbility(i);
++                string reason = IsOverheated ? "ядро перегрето"
++                    : ability.IsOnCooldown ? $"перезарядка {ability.CooldownRemaining:F1} сек"
++                    : currentEnergy < ability.energyCost ? $"не хватает энергии ({ability.energyCost})"
++                    : "нельзя применить";
++                Debug.Log($"[СПОСОБНОСТЬ] Категория «{GetCategoryName(type)}» недоступна: {reason}");
++                return;
+             }
+         }
++        Debug.Log($"[СПОСОБНОСТЬ] Категория «{GetCategoryName(type)}» не назначена ни на одну способность.");
++    }
++
++    private static string GetCategoryName(CoreAbilityBase.AbilityType type)
++    {
++        switch (type)
++        {
++            case CoreAbilityBase.AbilityType.Combat: return "Красные (боевые)";
++            case CoreAbilityBase.AbilityType.BuffDebuff: return "Жёлтые (баффы/дебаффы)";
++            case CoreAbilityBase.AbilityType.Regeneration: return "Зелёные (регенерация)";
++            case CoreAbilityBase.AbilityType.Ultimate: return "Фиолетовые (ультимейт)";
++            default: return type.ToString();
++        }
++    }
++
++    private void ActivateAbility(CoreAbilityBase ability)
++    {
++        ability.Activate(this, stateManager, movement);
++        SpendEnergy(ability.energyCost);
++
++        if (overheatSystem != null)
++            overheatSystem.AddHeat(ability.heatGenerated);
+     }
+ 
+     public void RepairAllParts()
+@@ -144,15 +193,7 @@ public class PlayerCore : MonoBehaviour
+ 
+         if (!CanUseAbility || !ability.CanActivate(this)) return false;
+ 
+-        ability.Activate(this, stateManager, movement);
+-        SpendEnergy(ability.energyCost);
+-
+-        if (overheatSystem != null)
+-            overheatSystem.AddHeat(ability.heatGenerated);
+-
+-        if (coreVisual != null)
+-            coreVisual.SetCoreColor(ability.GetCoreColor());
+-
++        ActivateAbility(ability);
+         return true;
+     }
+ 
+-- 
+2.39.5
+
